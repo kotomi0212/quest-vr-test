@@ -1,0 +1,52 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+  <meta charset="UTF-8">
+  <script src="https://aframe.io/releases/1.7.1/aframe.min.js"></script>
+  <title>Quest VR Test</title>
+</head>
+
+<body>
+  <a-scene>
+
+    <a-plane
+      position="0 0 -4"
+      rotation="-90 0 0"
+      width="20"
+      height="20"
+      color="#CCCCCC">
+    </a-plane>
+
+    <a-sphere
+      position="0 1.5 -4"
+      radius="0.5"
+      color="#FF4444">
+    </a-sphere>
+
+    <a-box
+      position="0 1.5 -6"
+      width="8"
+      height="3"
+      depth="0.1"
+      color="#88AAFF"
+      animation="
+        property: position;
+        from: -1 1.5 -6;
+        to: 1 1.5 -6;
+        direction: alternate;
+        dur: 3000;
+        loop: true;
+        easing: easeInOutSine">
+    </a-box>
+
+    <a-sky color="#EEEEFF"></a-sky>
+
+    <a-entity
+      camera
+      look-controls
+      position="0 1.6 0">
+    </a-entity>
+
+  </a-scene>
+</body>
+</html>
