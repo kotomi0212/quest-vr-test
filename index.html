@@ -8,70 +8,123 @@
   <title>VR Slash Game</title>
 
 <script>
-  AFRAME.registerComponent('hand-slash', {
+  AFRAME.registerComponent('finger-collision', {
     schema: {
       target: { type: 'string', default: '.slashable' },
-      distance: { type: 'number', default: 0.8 }
+      radius: { type: 'number', default: 0.08 }
     },
 
     init: function () {
-      this.handPosition = new THREE.Vector3();
-      this.targetPosition = new THREE.Vector3();
-      this.cooldown = false;
+      this.fingerPosition = new THREE.Vector3();
+      this.targetBox = new THREE.Box3();
+      this.cooldownTargets = new WeakSet();
+
+      // 人差し指の位置を確認するための赤い球
+      this.debugSphere = document.createElement('a-sphere');
+      this.debugSphere.setAttribute('radius', '0.04');
+      this.debugSphere.setAttribute('color', '#FF0000');
+      this.debugSphere.setAttribute(
+        'material',
+        'emissive: #FF0000; emissiveIntensity: 1'
+      );
+
+      this.el.appendChild(this.debugSphere);
     },
 
     tick: function () {
-      if (this.cooldown) return;
+      const scene = this.el.sceneEl;
+      const frame = scene.frame;
+      const renderer = scene.renderer;
 
-      const handControls =
-        this.el.components['hand-tracking-controls'];
+      if (!frame || !renderer || !renderer.xr) return;
 
-      // 手が認識されていない間は判定しない
-      if (!handControls) return;
+      const session = renderer.xr.getSession();
+      const referenceSpace = renderer.xr.getReferenceSpace();
 
-      this.el.object3D.getWorldPosition(this.handPosition);
+      if (!session || !referenceSpace) return;
+
+      let rightHand = null;
+
+      // 右手の入力情報を探す
+      for (const inputSource of session.inputSources) {
+        if (
+          inputSource.handedness === 'right' &&
+          inputSource.hand
+        ) {
+          rightHand = inputSource;
+          break;
+        }
+      }
+
+      if (!rightHand) return;
+
+      // 右手の人差し指先を取得
+      const fingerJoint =
+        rightHand.hand.get('index-finger-tip');
+
+      if (!fingerJoint) return;
+
+      const fingerPose =
+        frame.getJointPose(fingerJoint, referenceSpace);
+
+      if (!fingerPose) return;
+
+      const position = fingerPose.transform.position;
+
+      this.fingerPosition.set(
+        position.x,
+        position.y,
+        position.z
+      );
+
+      // 赤い確認球を指先へ移動
+      this.debugSphere.object3D.position.copy(
+        this.fingerPosition
+      );
 
       const targets =
         document.querySelectorAll(this.data.target);
 
       targets.forEach((target) => {
         if (!target.object3D.visible) return;
+        if (this.cooldownTargets.has(target)) return;
 
-        target.object3D.getWorldPosition(this.targetPosition);
+        // 箱そのものの範囲を取得
+        this.targetBox.setFromObject(target.object3D);
 
+        // 指先から箱までの最短距離
         const distance =
-          this.handPosition.distanceTo(this.targetPosition);
+          this.targetBox.distanceToPoint(
+            this.fingerPosition
+          );
 
-        if (distance < this.data.distance) {
-          this.cooldown = true;
-          this.slashTarget(target);
-
-          setTimeout(() => {
-            this.cooldown = false;
-          }, 500);
+        if (distance <= this.data.radius) {
+          this.hitTarget(target);
         }
       });
     },
 
-    slashTarget: function (target) {
+    hitTarget: function (target) {
+      this.cooldownTargets.add(target);
       target.object3D.visible = false;
 
       const score = document.querySelector('#score');
 
       if (score) {
-        const currentScore =
+        const current =
           Number(score.getAttribute('value')) || 0;
 
         score.setAttribute(
           'value',
-          String(currentScore + 1)
+          String(current + 1)
         );
       }
 
+      // 2秒後に場所を変えて復活
       setTimeout(() => {
-        const x = (Math.random() - 0.5) * 3;
-        const y = 1.0 + Math.random() * 1.5;
-        const z = -1.5 - Math.random() * 1.5;
+        const x = (Math.random() - 0.5) * 1.6;
+        const y = 1.0 + Math.random() * 1.2;
+        const z = -0.7 - Math.random() * 0.8;
 
         target.setAttribute(
           'position',
@@ -79,6 +132,7 @@
         );
 
         target.object3D.visible = true;
+        this.cooldownTargets.delete(target);
       }, 2000);
     }
   });
@@ -87,8 +141,9 @@
 
 <body>
   <a-scene
-    background="color: #080818"
-    renderer="colorManagement: true">
+  finger-collision="target: .slashable; radius: 0.08"
+  background="color: #080818"
+  renderer="colorManagement: true">
 
     <!-- 床 -->
     <a-plane
