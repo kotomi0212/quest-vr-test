@@ -186,11 +186,12 @@ AFRAME.registerComponent('engel-pilot',{
 <p>コントローラーなし：条件を選んで上のボタンを押す → VR内で正面を向く → 5秒後に位置合わせ → 10秒後に試行開始。試行ごとにVRを出て条件を選び直します。</p>
 <button id="calibrate">位置合わせ / C</button><button id="start">開始 / Space</button><button id="stop">中止 / Esc</button><br>
 <button id="json">JSON保存</button><button id="csv">CSV保存</button>
-<p>VR: 右A＝条件、右トリガー＝開始、右B＝中止、左X＝位置合わせ。試行後はVRを出てログ保存。</p>
+<p>手だけの操作：試行後はVRを出て次の条件を選択・ログ保存。途中で中止する場合もVRを終了してください。</p>
+<p>コントローラーがある場合：右A＝条件、右トリガー＝開始、右B＝中止、左X＝位置合わせ。</p>
 <p id="info">Loading A-Frame…</p>
 <p>視覚刺激の試作版。点の密度・サイズは近似、注視点の色を数える課題は省略。</p>
 </div>
-<a-scene engel-pilot background="color: #B8B8B8" renderer="antialias: true" webxr="referenceSpaceType: local-floor">
+<a-scene engel-pilot background="color: #B8B8B8" renderer="antialias: true" webxr="referenceSpaceType: local-floor; optionalFeatures: hand-tracking">
   <a-entity id="environment" position="0 1.6 0">
     <a-entity id="tunnel"></a-entity>
     <a-sphere id="fixation" position="0 0 -24" radius="0.045" material="color: #FF0000; shader: flat"></a-sphere>
