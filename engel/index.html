@@ -1,0 +1,159 @@
+<!doctype html>
+<html lang="ja">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Engel stimulus · Quest pilot</title>
+<script src="https://aframe.io/releases/1.8.0/aframe.min.js"></script>
+<style>
+body{margin:0;font-family:system-ui}#panel{position:fixed;z-index:10;top:12px;left:12px;max-width:440px;padding:16px;background:#fffffff0;border-radius:12px}button,input{font-size:16px;padding:8px;margin:3px}p{margin:8px 0;font-size:14px}#info{white-space:pre-line}input[type=number]{width:75px}
+</style>
+<script>
+'use strict';
+AFRAME.registerComponent('engel-pilot',{
+  init(){
+    if(this.el.hasLoaded)this.setup();
+    else this.el.addEventListener('loaded',()=>this.setup(),{once:true});
+  },
+  setup(){
+    const T=AFRAME.THREE;
+    this.env=document.querySelector('#environment');
+    this.tunnel=document.querySelector('#tunnel');
+    this.fix=document.querySelector('#fixation');
+    this.cam=document.querySelector('#camera');
+    this.hud=document.querySelector('#hud');
+    this.freqs=[0.2,0.8,1.2,0];this.index=0;this.phase='idle';
+    this.head=new T.Vector3();this.quat=new T.Quaternion();
+    try{this.trials=JSON.parse(localStorage.getItem('engel-pilot-v1')||'[]');}catch{this.trials=[];}
+    this.buildTunnel(1.6);
+    this.env.object3D.position.set(0,1.6,0);
+    const right=document.querySelector('#right');
+    right.addEventListener('abuttondown',()=>this.select((this.index+1)%4));
+    right.addEventListener('triggerdown',()=>this.start());
+    right.addEventListener('bbuttondown',()=>this.abort('B button'));
+    document.querySelector('#left').addEventListener('xbuttondown',()=>this.calibrate());
+    window.addEventListener('keydown',e=>{
+      if(e.target.matches('input'))return;
+      if(e.repeat)return;
+      if(e.code==='Space'){e.preventDefault();this.start();}
+      if(e.code==='Escape')this.abort('Escape');
+      if(e.code==='KeyC')this.calibrate();
+      const i={'Digit1':0,'Digit2':1,'Digit3':2,'Digit0':3}[e.code];
+      if(i!==undefined)this.select(i);
+    });
+    document.querySelectorAll('[data-condition]').forEach(b=>b.onclick=()=>this.select(Number(b.dataset.condition)));
+    document.querySelector('#start').onclick=()=>this.start();
+    document.querySelector('#stop').onclick=()=>this.abort('Stop');
+    document.querySelector('#calibrate').onclick=()=>this.calibrate();
+    document.querySelector('#json').onclick=()=>this.download('json');
+    document.querySelector('#csv').onclick=()=>this.download('csv');
+    document.addEventListener('visibilitychange',()=>{if(document.hidden)this.abort('page hidden');});
+    this.el.addEventListener('exit-vr',()=>{this.abort('exit VR');document.querySelector('#panel').hidden=false;});
+    this.el.addEventListener('enter-vr',()=>{document.querySelector('#panel').hidden=true;});
+    this.ready=true;this.status('Ready. Calibrate before starting.');
+  },
+  buildTunnel(radius){
+    const T=AFRAME.THREE;
+    const old=this.tunnel.getObject3D('mesh');
+    if(old){old.geometry.dispose();old.material.dispose();this.tunnel.removeObject3D('mesh');}
+    let seed=20261004;
+    const rand=()=>{seed=(1664525*seed+1013904223)>>>0;return seed/4294967296;};
+    const p=new Float32Array(6000*3);
+    for(let i=0;i<6000;i++){
+      const theta=2*Math.PI*rand();
+      p[3*i]=radius*Math.cos(theta);p[3*i+1]=radius*Math.sin(theta);p[3*i+2]=50*(rand()-0.5);
+    }
+    const g=new T.BufferGeometry();g.setAttribute('position',new T.BufferAttribute(p,3));
+    this.tunnel.setObject3D('mesh',new T.Points(g,new T.PointsMaterial({color:0x000000,size:0.035,sizeAttenuation:true})));
+    this.radius=radius;
+  },
+  calibrate(){
+    if(this.phase!=='idle')return;
+    const radius=Number(document.querySelector('#eye').value);
+    if(!Number.isFinite(radius)||radius<0.5||radius>2.2){this.status('Eye height must be 0.5–2.2 m.');return;}
+    this.cam.object3D.getWorldPosition(this.head);
+    this.cam.object3D.getWorldQuaternion(this.quat);
+    const forward=new AFRAME.THREE.Vector3(0,0,-1).applyQuaternion(this.quat);
+    const yaw=Math.atan2(-forward.x,-forward.z);
+    this.env.object3D.position.copy(this.head);this.env.object3D.rotation.set(0,yaw,0);
+    this.buildTunnel(radius);this.status('Calibrated. Keep your feet at this position.');
+  },
+  select(i){if(this.phase==='idle'){this.index=i;this.status();}},
+  label(){return this.freqs[this.index]===0?'BASELINE':this.freqs[this.index].toFixed(1)+' Hz';},
+  status(message=''){
+    const text=this.label()+' | '+this.phase+'\nA: condition   Trigger: start\nX (left): calibrate   B: stop';
+    this.hud.setAttribute('value',text);this.hud.setAttribute('visible',this.phase==='idle');
+    document.querySelector('#info').textContent=text+'\nSaved trials: '+this.trials.length+(message?'\n'+message:'');
+  },
+  start(){
+    if(!this.ready||this.phase!=='idle')return;
+    const now=performance.now(),f=this.freqs[this.index];
+    this.trial={id:new Date().toISOString(),frequency_hz:f,amplitude_m:f?0.012/f:0,
+      pre_s:5+3*Math.random(),initial_phase_rad:2*Math.PI*Math.random(),stim_duration_s:30,post_s:5,
+      eye_height_m:this.radius,environment_position:this.env.object3D.position.toArray(),
+      environment_yaw_rad:this.env.object3D.rotation.y,wall_time_origin_ms:performance.timeOrigin,
+      point_count:6000,point_size_m:0.035,point_seed:20261004,
+      note:'Pilot approximation; no counting task; Quest head pose only. Frames are application samples, not measured photon onset.',events:[],frames:[]};
+    this.startMs=now;this.phaseMs=now;this.phase='pre';this.event('trial_start',now);
+    this.fix.setAttribute('material','color','#FFFFFF');this.status();
+  },
+  event(name,now){this.trial.events.push({name,performance_ms:now,trial_s:(now-this.startMs)/1000});},
+  tick(){
+    if(!this.ready||this.phase==='idle')return;
+    const now=performance.now();
+    let elapsed=(now-this.phaseMs)/1000;
+    if(this.phase==='pre'&&elapsed>=this.trial.pre_s){this.phase='stim';this.phaseMs=now;this.event('stimulus_on',now);elapsed=0;}
+    if(this.phase==='stim'&&elapsed>=30){this.phase='post';this.phaseMs=now;this.event('stimulus_off',now);elapsed=0;}
+    if(this.phase==='post'&&elapsed>=5){this.finish('completed',now);return;}
+    const z=this.phase==='stim'?this.trial.amplitude_m*Math.sin(2*Math.PI*this.trial.frequency_hz*elapsed+this.trial.initial_phase_rad):0;
+    this.tunnel.object3D.position.z=z;
+    this.cam.object3D.getWorldPosition(this.head);this.cam.object3D.getWorldQuaternion(this.quat);
+    this.trial.frames.push([now,(now-this.startMs)/1000,this.phase,this.phase==='stim'?elapsed:null,z,...this.head.toArray(),...this.quat.toArray()]);
+  },
+  abort(reason){if(this.ready&&this.phase!=='idle')this.finish('aborted: '+reason,performance.now());},
+  finish(result,now){
+    this.event('trial_end',now);this.trial.result=result;this.trials.push(this.trial);
+    this.phase='idle';this.tunnel.object3D.position.z=0;this.fix.setAttribute('material','color','#FF0000');
+    let message=result;
+    try{localStorage.setItem('engel-pilot-v1',JSON.stringify(this.trials));}catch{message+='; storage full — download now before closing.';}
+    this.status(message);
+  },
+  download(kind){
+    if(this.phase!=='idle'){this.status('Finish or stop the trial before downloading.');return;}
+    let text;
+    if(kind==='json')text=JSON.stringify({version:1,trials:this.trials},null,2);
+    else{
+      const rows=['trial_id,result,frequency_hz,amplitude_m,initial_phase_rad,unix_ms,trial_s,phase,stim_s,tunnel_local_z_m,head_world_x_m,head_world_y_m,head_world_z_m,qx,qy,qz,qw'];
+      for(const t of this.trials)for(const f of t.frames)rows.push([t.id,t.result,t.frequency_hz,t.amplitude_m,t.initial_phase_rad,t.wall_time_origin_ms+f[0],...f.slice(1)].join(','));
+      text=rows.join('\n');
+    }
+    const url=URL.createObjectURL(new Blob([text],{type:kind==='json'?'application/json':'text/csv'}));
+    const a=document.createElement('a');a.href=url;a.download='engel-'+new Date().toISOString().replace(/[:.]/g,'-')+'.'+kind;a.click();setTimeout(()=>URL.revokeObjectURL(url),1000);
+  }
+});
+</script>
+</head>
+<body>
+<div id="panel">
+<b>Engel stimulus · Quest pilot</b>
+<p>眼高（床から目まで）<input id="eye" type="number" min="0.5" max="2.2" step="0.01" value="1.60"> m</p>
+<button data-condition="0">0.2 Hz</button><button data-condition="1">0.8 Hz</button><button data-condition="2">1.2 Hz</button><button data-condition="3">Baseline</button><br>
+<button id="calibrate">位置合わせ / C</button><button id="start">開始 / Space</button><button id="stop">中止 / Esc</button><br>
+<button id="json">JSON保存</button><button id="csv">CSV保存</button>
+<p>VR: 右A＝条件、右トリガー＝開始、右B＝中止、左X＝位置合わせ。試行後はVRを出てログ保存。</p>
+<p id="info">Loading A-Frame…</p>
+<p>視覚刺激の試作版。点の密度・サイズは近似、注視点の色を数える課題は省略。</p>
+</div>
+<a-scene engel-pilot background="color: #B8B8B8" renderer="antialias: true" webxr="referenceSpaceType: local-floor">
+  <a-entity id="environment" position="0 1.6 0">
+    <a-entity id="tunnel"></a-entity>
+    <a-sphere id="fixation" position="0 0 -24" radius="0.045" material="color: #FF0000; shader: flat"></a-sphere>
+  </a-entity>
+  <a-camera id="camera" position="0 1.6 0" wasd-controls="enabled: false">
+    <a-text id="hud" position="0 -0.25 -1.5" align="center" width="2.7" color="#222222"></a-text>
+  </a-camera>
+  <a-entity id="right" meta-touch-controls="hand: right; model: false"></a-entity>
+  <a-entity id="left" meta-touch-controls="hand: left; model: false"></a-entity>
+</a-scene>
+</body>
+</html>
