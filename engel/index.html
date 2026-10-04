@@ -23,7 +23,9 @@ AFRAME.registerComponent('engel-pilot',{
     this.cam=document.querySelector('#camera');
     this.hud=document.querySelector('#hud');
     this.freqs=[0.2,0.8,1.2,0];this.index=0;this.phase='idle';this.autoArmed=false;this.pendingAuto=null;
+    this.testArmed=false;this.stopVerified=false;this.stopHoldSince=null;this.enteredMs=0;
     this.head=new T.Vector3();this.quat=new T.Quaternion();
+    this.stopDirection=new T.Vector3();
     try{this.trials=JSON.parse(localStorage.getItem('engel-pilot-v1')||'[]');}catch{this.trials=[];}
     this.buildTunnel(1.6);
     this.env.object3D.position.set(0,1.6,0);
@@ -46,13 +48,24 @@ AFRAME.registerComponent('engel-pilot',{
     document.querySelector('#stop').onclick=()=>this.abort('Stop');
     document.querySelector('#calibrate').onclick=()=>this.calibrate();
     document.querySelector('#auto-vr').onclick=()=>this.enterAutoVR();
+    document.querySelector('#test-stop').onclick=()=>this.enterStopTest();
     document.querySelector('#json').onclick=()=>this.download('json');
     document.querySelector('#csv').onclick=()=>this.download('csv');
     document.addEventListener('visibilitychange',()=>{if(document.hidden)this.abort('page hidden');});
     this.el.addEventListener('exit-vr',()=>{this.abort('exit VR');document.querySelector('#panel').hidden=false;});
     this.el.addEventListener('enter-vr',()=>{
       document.querySelector('#panel').hidden=true;
-      if(this.autoArmed){
+      this.enteredMs=performance.now();this.stopHoldSince=null;
+      const session=this.el.renderer.xr.getSession();
+      if(session){
+        this.handStop=e=>{
+          if(e.inputSource&&e.inputSource.hand&&performance.now()-this.enteredMs>=1500&&this.phase!=='idle')this.requestStop('hand pinch');
+        };
+        session.addEventListener('selectstart',this.handStop);
+      }
+      if(this.testArmed){
+        this.testArmed=false;this.phase='stop-test';this.status('Static stop test. No stimulus.');
+      }else if(this.autoArmed){
         this.autoArmed=false;this.phase='prepare';
         this.pendingAuto={startMs:performance.now(),calibrated:false,lastSeconds:null};
         this.status('Look straight ahead. Automatic alignment in 5 seconds.');
@@ -77,6 +90,7 @@ AFRAME.registerComponent('engel-pilot',{
   },
   enterAutoVR(){
     if(!this.ready||this.phase!=='idle')return;
+    if(!this.stopVerified){this.enterStopTest();return;}
     const radius=Number(document.querySelector('#eye').value);
     if(!Number.isFinite(radius)||radius<0.5||radius>2.2){this.status('Eye height must be 0.5–2.2 m.');return;}
     this.autoArmed=true;
@@ -89,6 +103,36 @@ AFRAME.registerComponent('engel-pilot',{
     }catch{
       this.autoArmed=false;this.status('VR entry failed. Try the button again in Quest Browser.');
     }
+  },
+  enterStopTest(){
+    if(!this.ready||this.phase!=='idle')return;
+    this.autoArmed=false;this.testArmed=true;
+    this.status('First test the stop action in static VR: look down for one second.');
+    try{
+      const entry=this.el.enterVR();
+      if(entry&&typeof entry.catch==='function')entry.catch(()=>{
+        this.testArmed=false;this.status('VR entry failed. Try again in Quest Browser.');
+      });
+    }catch{this.testArmed=false;this.status('VR entry failed. Try again in Quest Browser.');}
+  },
+  checkEmergencyStop(now){
+    this.cam.object3D.getWorldQuaternion(this.quat);
+    this.stopDirection.set(0,0,-1).applyQuaternion(this.quat);
+    if(this.stopDirection.y<-Math.sin(55*Math.PI/180)){
+      if(this.stopHoldSince===null)this.stopHoldSince=now;
+      if(now-this.stopHoldSince>=1000){this.requestStop('looked down');return true;}
+    }else this.stopHoldSince=null;
+    return false;
+  },
+  requestStop(reason){
+    if(this.phase==='stop-test'){
+      this.stopVerified=true;this.phase='idle';this.stopHoldSince=null;
+      this.status('Stop test passed. Choose a condition and start the automatic trial.');
+    }else this.abort(reason);
+    try{
+      const exit=this.el.exitVR();
+      if(exit&&typeof exit.catch==='function')exit.catch(()=>this.status('Stopped. Exit VR using the headset menu.'));
+    }catch{this.status('Stopped. Exit VR using the headset menu.');}
   },
   calibrate(){
     if(this.phase!=='idle'&&this.phase!=='prepare')return false;
@@ -106,8 +150,8 @@ AFRAME.registerComponent('engel-pilot',{
   status(message=''){
     const preparing=this.phase==='prepare'&&this.pendingAuto;
     const seconds=preparing?Math.max(0,Math.ceil(10-(performance.now()-this.pendingAuto.startMs)/1000)):0;
-    const text=this.label()+' | '+this.phase+(preparing?'\nTrial starts in '+seconds+' s\nLook straight ahead. Arms relaxed.':'\nNo controllers: exit VR, choose a condition,\nthen use the automatic trial button.\nControllers: A = condition; Trigger = start');
-    this.hud.setAttribute('value',text);this.hud.setAttribute('visible',this.phase==='idle'||this.phase==='prepare');
+    const text=this.phase==='stop-test'?'STOP TEST - STATIC SCENE\nLook down steeply for 1 second\nto STOP and exit VR.\nOr raise a hand and pinch.':this.label()+' | '+this.phase+(preparing?'\nTrial starts in '+seconds+' s\nLook straight ahead. Arms relaxed.\nSTOP: look down 1 second or pinch.':'\nNo controllers: exit VR, choose a condition,\nthen use the automatic trial button.\nSTOP: look down 1 second or pinch.');
+    this.hud.setAttribute('value',text);this.hud.setAttribute('visible',this.phase==='idle'||this.phase==='prepare'||this.phase==='stop-test');
     document.querySelector('#info').textContent=text+'\nSaved trials: '+this.trials.length+(message?'\n'+message:'');
   },
   start(){
@@ -118,6 +162,7 @@ AFRAME.registerComponent('engel-pilot',{
       eye_height_m:this.radius,environment_position:this.env.object3D.position.toArray(),
       environment_yaw_rad:this.env.object3D.rotation.y,wall_time_origin_ms:performance.timeOrigin,
       start_mode:this.nextStartMode||'manual',preparation_s:this.nextStartMode==='controller-free'?10:0,
+      emergency_stop:'Look down more than 55 degrees for 1 second, or hand pinch. Controller-free trials require a passed static stop test.',
       point_count:6000,point_size_m:0.035,point_seed:20261004,
       note:'Pilot approximation; no counting task; Quest head pose only. Frames are application samples, not measured photon onset.',events:[],frames:[]};
     this.startMs=now;this.phaseMs=now;this.phase='pre';this.event('trial_start',now);
@@ -128,6 +173,8 @@ AFRAME.registerComponent('engel-pilot',{
   tick(){
     if(!this.ready||this.phase==='idle')return;
     const now=performance.now();
+    if(this.checkEmergencyStop(now))return;
+    if(this.phase==='stop-test')return;
     if(this.phase==='prepare'){
       const pending=this.pendingAuto,elapsed=(now-pending.startMs)/1000;
       if(!pending.calibrated&&elapsed>=5){
@@ -149,7 +196,8 @@ AFRAME.registerComponent('engel-pilot',{
     this.trial.frames.push([now,(now-this.startMs)/1000,this.phase,this.phase==='stim'?elapsed:null,z,...this.head.toArray(),...this.quat.toArray()]);
   },
   abort(reason){
-    this.autoArmed=false;
+    this.autoArmed=false;this.testArmed=false;this.stopHoldSince=null;
+    if(this.ready&&this.phase==='stop-test'){this.phase='idle';this.status('Stop test cancelled. Complete the stop test before a trial.');return;}
     if(this.ready&&this.phase==='prepare'){
       this.pendingAuto=null;this.nextStartMode=null;this.phase='idle';this.status('Preparation cancelled: '+reason);return;
     }
@@ -183,6 +231,8 @@ AFRAME.registerComponent('engel-pilot',{
 <p>眼高（床から目まで）<input id="eye" type="number" min="0.5" max="2.2" step="0.01" value="1.60"> m</p>
 <button data-condition="0">0.2 Hz</button><button data-condition="1">0.8 Hz</button><button data-condition="2">1.2 Hz</button><button data-condition="3">Baseline</button><br>
 <button id="auto-vr">手だけで1試行（VRへ）</button>
+<button id="test-stop">停止テスト（静止したVR）</button>
+<p><b>中止：顔を床へ向けて1秒待つ、または手を前に上げて親指と人差し指をつまむ。</b> トンネルを止めてVRを終了します。初回は必ず静止したVRで停止テストを行い、成功後に試行できます。</p>
 <p>コントローラーなし：条件を選んで上のボタンを押す → VR内で正面を向く → 5秒後に位置合わせ → 10秒後に試行開始。試行ごとにVRを出て条件を選び直します。</p>
 <button id="calibrate">位置合わせ / C</button><button id="start">開始 / Space</button><button id="stop">中止 / Esc</button><br>
 <button id="json">JSON保存</button><button id="csv">CSV保存</button>
