@@ -157,14 +157,15 @@ AFRAME.registerComponent('engel-pilot',{
   start(){
     if(!this.ready||this.phase!=='idle')return;
     const now=performance.now(),f=this.freqs[this.index];
-    this.trial={id:new Date().toISOString(),frequency_hz:f,amplitude_m:f?0.012/f:0,
+    this.trial={id:new Date().toISOString(),frequency_hz:f,amplitude_m:f?0.018/f:0,
+      stimulus_version:'pilot-amplitude-1.5x',amplitude_scale_vs_previous_pilot:1.5,
       pre_s:5+3*Math.random(),initial_phase_rad:2*Math.PI*Math.random(),stim_duration_s:30,post_s:5,
       eye_height_m:this.radius,environment_position:this.env.object3D.position.toArray(),
       environment_yaw_rad:this.env.object3D.rotation.y,wall_time_origin_ms:performance.timeOrigin,
       start_mode:this.nextStartMode||'manual',preparation_s:this.nextStartMode==='controller-free'?10:0,
       emergency_stop:'Look down more than 55 degrees for 1 second, or hand pinch. Controller-free trials require a passed static stop test.',
       point_count:6000,point_size_m:0.035,point_seed:20261004,
-      note:'Pilot approximation; no counting task; Quest head pose only. Frames are application samples, not measured photon onset.',events:[],frames:[]};
+      note:'Pilot approximation; amplitude increased 1.5x from previous pilot, not a verified original-paper amplitude; no counting task; Quest head pose only. Frames are application samples, not measured photon onset.',events:[],frames:[]};
     this.startMs=now;this.phaseMs=now;this.phase='pre';this.event('trial_start',now);
     this.nextStartMode=null;
     this.fix.setAttribute('material','color','#FFFFFF');this.status();
@@ -239,7 +240,8 @@ AFRAME.registerComponent('engel-pilot',{
 <p>手だけの操作：試行後はVRを出て次の条件を選択・ログ保存。途中で中止する場合もVRを終了してください。</p>
 <p>コントローラーがある場合：右A＝条件、右トリガー＝開始、右B＝中止、左X＝位置合わせ。</p>
 <p id="info">Loading A-Frame…</p>
-<p>視覚刺激の試作版。点の密度・サイズは近似、注視点の色を数える課題は省略。</p>
+<p><b>振幅を前の試作版の1.5倍に変更：</b>0.2 Hz＝±9 cm、0.8 Hz＝±2.25 cm、1.2 Hz＝±1.5 cm（中心からの最大変位）。周波数に反比例する関係は維持。</p>
+<p>視覚刺激の試作版。振幅は原論文の確認済み設定値ではありません。点の密度・サイズは近似、注視点の色を数える課題は省略。</p>
 </div>
 <a-scene engel-pilot background="color: #B8B8B8" renderer="antialias: true" webxr="referenceSpaceType: local-floor; optionalFeatures: hand-tracking">
   <a-entity id="environment" position="0 1.6 0">
