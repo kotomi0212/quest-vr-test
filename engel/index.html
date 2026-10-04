@@ -22,7 +22,7 @@ AFRAME.registerComponent('engel-pilot',{
     this.fix=document.querySelector('#fixation');
     this.cam=document.querySelector('#camera');
     this.hud=document.querySelector('#hud');
-    this.freqs=[0.2,0.8,1.2,0];this.index=0;this.phase='idle';
+    this.freqs=[0.2,0.8,1.2,0];this.index=0;this.phase='idle';this.autoArmed=false;this.pendingAuto=null;
     this.head=new T.Vector3();this.quat=new T.Quaternion();
     try{this.trials=JSON.parse(localStorage.getItem('engel-pilot-v1')||'[]');}catch{this.trials=[];}
     this.buildTunnel(1.6);
@@ -45,11 +45,19 @@ AFRAME.registerComponent('engel-pilot',{
     document.querySelector('#start').onclick=()=>this.start();
     document.querySelector('#stop').onclick=()=>this.abort('Stop');
     document.querySelector('#calibrate').onclick=()=>this.calibrate();
+    document.querySelector('#auto-vr').onclick=()=>this.enterAutoVR();
     document.querySelector('#json').onclick=()=>this.download('json');
     document.querySelector('#csv').onclick=()=>this.download('csv');
     document.addEventListener('visibilitychange',()=>{if(document.hidden)this.abort('page hidden');});
     this.el.addEventListener('exit-vr',()=>{this.abort('exit VR');document.querySelector('#panel').hidden=false;});
-    this.el.addEventListener('enter-vr',()=>{document.querySelector('#panel').hidden=true;});
+    this.el.addEventListener('enter-vr',()=>{
+      document.querySelector('#panel').hidden=true;
+      if(this.autoArmed){
+        this.autoArmed=false;this.phase='prepare';
+        this.pendingAuto={startMs:performance.now(),calibrated:false,lastSeconds:null};
+        this.status('Look straight ahead. Automatic alignment in 5 seconds.');
+      }
+    });
     this.ready=true;this.status('Ready. Calibrate before starting.');
   },
   buildTunnel(radius){
@@ -67,22 +75,39 @@ AFRAME.registerComponent('engel-pilot',{
     this.tunnel.setObject3D('mesh',new T.Points(g,new T.PointsMaterial({color:0x000000,size:0.035,sizeAttenuation:true})));
     this.radius=radius;
   },
-  calibrate(){
-    if(this.phase!=='idle')return;
+  enterAutoVR(){
+    if(!this.ready||this.phase!=='idle')return;
     const radius=Number(document.querySelector('#eye').value);
     if(!Number.isFinite(radius)||radius<0.5||radius>2.2){this.status('Eye height must be 0.5–2.2 m.');return;}
+    this.autoArmed=true;
+    this.status('Entering VR. Stand in place and look straight ahead.');
+    try{
+      const entry=this.el.enterVR();
+      if(entry&&typeof entry.catch==='function')entry.catch(()=>{
+        this.autoArmed=false;this.status('VR entry failed. Try the button again in Quest Browser.');
+      });
+    }catch{
+      this.autoArmed=false;this.status('VR entry failed. Try the button again in Quest Browser.');
+    }
+  },
+  calibrate(){
+    if(this.phase!=='idle'&&this.phase!=='prepare')return false;
+    const radius=Number(document.querySelector('#eye').value);
+    if(!Number.isFinite(radius)||radius<0.5||radius>2.2){this.status('Eye height must be 0.5–2.2 m.');return false;}
     this.cam.object3D.getWorldPosition(this.head);
     this.cam.object3D.getWorldQuaternion(this.quat);
     const forward=new AFRAME.THREE.Vector3(0,0,-1).applyQuaternion(this.quat);
     const yaw=Math.atan2(-forward.x,-forward.z);
     this.env.object3D.position.copy(this.head);this.env.object3D.rotation.set(0,yaw,0);
-    this.buildTunnel(radius);this.status('Calibrated. Keep your feet at this position.');
+    this.buildTunnel(radius);this.status('Calibrated. Keep your feet at this position.');return true;
   },
   select(i){if(this.phase==='idle'){this.index=i;this.status();}},
   label(){return this.freqs[this.index]===0?'BASELINE':this.freqs[this.index].toFixed(1)+' Hz';},
   status(message=''){
-    const text=this.label()+' | '+this.phase+'\nA: condition   Trigger: start\nX (left): calibrate   B: stop';
-    this.hud.setAttribute('value',text);this.hud.setAttribute('visible',this.phase==='idle');
+    const preparing=this.phase==='prepare'&&this.pendingAuto;
+    const seconds=preparing?Math.max(0,Math.ceil(10-(performance.now()-this.pendingAuto.startMs)/1000)):0;
+    const text=this.label()+' | '+this.phase+(preparing?'\nTrial starts in '+seconds+' s\nLook straight ahead. Arms relaxed.':'\nNo controllers: exit VR, choose a condition,\nthen use the automatic trial button.\nControllers: A = condition; Trigger = start');
+    this.hud.setAttribute('value',text);this.hud.setAttribute('visible',this.phase==='idle'||this.phase==='prepare');
     document.querySelector('#info').textContent=text+'\nSaved trials: '+this.trials.length+(message?'\n'+message:'');
   },
   start(){
@@ -92,15 +117,28 @@ AFRAME.registerComponent('engel-pilot',{
       pre_s:5+3*Math.random(),initial_phase_rad:2*Math.PI*Math.random(),stim_duration_s:30,post_s:5,
       eye_height_m:this.radius,environment_position:this.env.object3D.position.toArray(),
       environment_yaw_rad:this.env.object3D.rotation.y,wall_time_origin_ms:performance.timeOrigin,
+      start_mode:this.nextStartMode||'manual',preparation_s:this.nextStartMode==='controller-free'?10:0,
       point_count:6000,point_size_m:0.035,point_seed:20261004,
       note:'Pilot approximation; no counting task; Quest head pose only. Frames are application samples, not measured photon onset.',events:[],frames:[]};
     this.startMs=now;this.phaseMs=now;this.phase='pre';this.event('trial_start',now);
+    this.nextStartMode=null;
     this.fix.setAttribute('material','color','#FFFFFF');this.status();
   },
   event(name,now){this.trial.events.push({name,performance_ms:now,trial_s:(now-this.startMs)/1000});},
   tick(){
     if(!this.ready||this.phase==='idle')return;
     const now=performance.now();
+    if(this.phase==='prepare'){
+      const pending=this.pendingAuto,elapsed=(now-pending.startMs)/1000;
+      if(!pending.calibrated&&elapsed>=5){
+        if(!this.calibrate()){this.abort('alignment failed');return;}
+        pending.calibrated=true;
+      }
+      const seconds=Math.max(0,Math.ceil(10-elapsed));
+      if(seconds!==pending.lastSeconds){pending.lastSeconds=seconds;this.status();}
+      if(elapsed>=10){this.pendingAuto=null;this.phase='idle';this.nextStartMode='controller-free';this.start();}
+      return;
+    }
     let elapsed=(now-this.phaseMs)/1000;
     if(this.phase==='pre'&&elapsed>=this.trial.pre_s){this.phase='stim';this.phaseMs=now;this.event('stimulus_on',now);elapsed=0;}
     if(this.phase==='stim'&&elapsed>=30){this.phase='post';this.phaseMs=now;this.event('stimulus_off',now);elapsed=0;}
@@ -110,7 +148,13 @@ AFRAME.registerComponent('engel-pilot',{
     this.cam.object3D.getWorldPosition(this.head);this.cam.object3D.getWorldQuaternion(this.quat);
     this.trial.frames.push([now,(now-this.startMs)/1000,this.phase,this.phase==='stim'?elapsed:null,z,...this.head.toArray(),...this.quat.toArray()]);
   },
-  abort(reason){if(this.ready&&this.phase!=='idle')this.finish('aborted: '+reason,performance.now());},
+  abort(reason){
+    this.autoArmed=false;
+    if(this.ready&&this.phase==='prepare'){
+      this.pendingAuto=null;this.nextStartMode=null;this.phase='idle';this.status('Preparation cancelled: '+reason);return;
+    }
+    if(this.ready&&this.phase!=='idle')this.finish('aborted: '+reason,performance.now());
+  },
   finish(result,now){
     this.event('trial_end',now);this.trial.result=result;this.trials.push(this.trial);
     this.phase='idle';this.tunnel.object3D.position.z=0;this.fix.setAttribute('material','color','#FF0000');
@@ -138,6 +182,8 @@ AFRAME.registerComponent('engel-pilot',{
 <b>Engel stimulus · Quest pilot</b>
 <p>眼高（床から目まで）<input id="eye" type="number" min="0.5" max="2.2" step="0.01" value="1.60"> m</p>
 <button data-condition="0">0.2 Hz</button><button data-condition="1">0.8 Hz</button><button data-condition="2">1.2 Hz</button><button data-condition="3">Baseline</button><br>
+<button id="auto-vr">手だけで1試行（VRへ）</button>
+<p>コントローラーなし：条件を選んで上のボタンを押す → VR内で正面を向く → 5秒後に位置合わせ → 10秒後に試行開始。試行ごとにVRを出て条件を選び直します。</p>
 <button id="calibrate">位置合わせ / C</button><button id="start">開始 / Space</button><button id="stop">中止 / Esc</button><br>
 <button id="json">JSON保存</button><button id="csv">CSV保存</button>
 <p>VR: 右A＝条件、右トリガー＝開始、右B＝中止、左X＝位置合わせ。試行後はVRを出てログ保存。</p>
