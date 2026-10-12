@@ -89,6 +89,17 @@ AFRAME.registerComponent('stimulus-driver',{
  }
 });
 window.addEventListener('load',()=>{
+ const world=document.querySelector('#visual-world');
+ function box(pos,size,color){const n=document.createElement('a-box');n.setAttribute('position',pos);n.setAttribute('width',size[0]);n.setAttribute('height',size[1]);n.setAttribute('depth',size[2]);n.setAttribute('color',color);world.appendChild(n);}
+ for(let z=-8.5;z<3;z+=0.6)box('0 0.008 '+z,[9.9,0.008,0.016],'#8d765d');
+ for(let x=-4.5;x<5;x+=1)box(x+' 0.009 -3',[0.014,0.009,11.9],'#a18a70');
+ // Far-right shelving with books. Approximation, not paper coordinates.
+ box('4.5 1.25 -6.9',[0.55,2.5,2.5],'#675442');
+ for(let level=0;level<4;level++){
+  box('4.15 '+(0.25+level*0.6)+' -6.9',[0.8,0.07,2.5],'#ccb89a');
+  for(let j=0;j<6;j++)box('4.1 '+(0.5+level*0.6)+' '+(-7.9+j*0.32),[0.35,0.42,0.14],['#778f9b','#b08d72','#d8c9a5'][j%3]);
+ }
+
  const scene=document.querySelector('a-scene');
  if(previewMode){document.querySelector('#info').style.display='none';scene.setAttribute('vr-mode-ui','enabled',false);}
  scene.addEventListener('enter-vr',()=>{sceneReady=true;showStatus('VR準備完了。PCのSTART待ち');ack('ready');});
@@ -108,17 +119,38 @@ window.addEventListener('load',()=>{
 <span id="status">接続中...</span>
 <small>まずQuest内で「Enter VR」を押し、その後PCで開始してください。固定・転倒防止は別途必要です。</small></div>
 <a-scene stimulus-driver background="color: #e8eef7" vr-mode-ui="enabled: true">
+  <!-- Approximate modern room: dimensions and furnishings are design choices, not recovered from the paper. Origin = ankle/floor. -->
   <a-entity id="visual-world">
-    <a-sky color="#c8dff2"></a-sky>
-    <a-plane position="0 -1.6 -4" rotation="-90 0 0" width="200" height="200" color="#8daa9b" material="side: double"></a-plane>
-    <a-box position="-4 0 -8" width="0.25" height="5" depth="0.25" color="#ecfbff"></a-box>
-    <a-box position="4 0 -8" width="0.25" height="5" depth="0.25" color="#ecfbff"></a-box>
-    <a-box position="-4 2.5 -8" width="8" height="0.25" depth="0.25" color="#ecfbff"></a-box>
-    <a-box position="-4 0 -20" width="1" height="5" depth="1" color="#538672"></a-box>
-    <a-box position="4 0 -20" width="1" height="5" depth="1" color="#538672"></a-box>
-    <a-box position="-4 0 -35" width="1" height="5" depth="1" color="#538672"></a-box>
-    <a-box position="4 0 -35" width="1" height="5" depth="1" color="#538672"></a-box>
-    <a-box position="0 -0.4 -15" width="0.15" height="0.15" depth="30" color="#ffffff"></a-box>
+    <a-box position="0 -0.06 -3" width="10" height="0.12" depth="12" color="#b59b7c"></a-box>
+    <a-box position="0 3.5 -3" width="10" height="0.1" depth="12" color="#f0eee9"></a-box>
+    <a-box position="-5 1.75 -3" width="0.12" height="3.5" depth="12" color="#e4e1da"></a-box>
+    <a-box position="5 1.75 -3" width="0.12" height="3.5" depth="12" color="#d8dfe0"></a-box>
+    <a-box position="0 1.75 -9" width="10" height="3.5" depth="0.12" color="#ede9e1"></a-box>
+    <a-box position="0 1.75 3" width="10" height="3.5" depth="0.12" color="#ede9e1"></a-box>
+    <a-plane position="0 0.015 -4.3" rotation="-90 0 0" width="4.6" height="3.2" color="#829496"></a-plane>
+    <!-- Left: sofa and framed artwork -->
+    <a-box position="-3.2 0.4 -3.5" width="1.5" height="0.65" depth="3" color="#747f86"></a-box>
+    <a-box position="-3.8 0.85 -3.5" width="0.3" height="1.1" depth="3" color="#65717a"></a-box>
+    <a-box position="-3.2 0.75 -2" width="1.5" height="0.55" depth="0.22" color="#65717a"></a-box>
+    <a-box position="-3.2 0.75 -5" width="1.5" height="0.55" depth="0.22" color="#65717a"></a-box>
+    <a-box position="-4.91 2.15 -4" width="0.05" height="1.2" depth="1.9" color="#51463b"></a-box>
+    <a-box position="-4.87 2.15 -4" width="0.04" height="1.02" depth="1.72" color="#a7bbb4"></a-box>
+    <!-- Coffee table -->
+    <a-box position="-0.5 0.55 -4" width="1.9" height="0.12" depth="1" color="#715744"></a-box>
+    <a-box position="-1.2 0.27 -4" width="0.1" height="0.54" depth="0.8" color="#383c40"></a-box>
+    <a-box position="0.2 0.27 -4" width="0.1" height="0.54" depth="0.8" color="#383c40"></a-box>
+    <a-box position="-0.7 0.65 -4" width="0.45" height="0.08" depth="0.3" color="#e4d8c1"></a-box>
+    <!-- Back: window and right-side cabinet -->
+    <a-box position="-2.5 2 -8.9" width="3" height="1.9" depth="0.1" color="#627681"></a-box>
+    <a-box position="-2.5 2 -8.82" width="2.8" height="1.7" depth="0.04" color="#b5d6e4" material="shader: flat"></a-box>
+    <a-box position="-2.5 2 -8.77" width="0.07" height="1.7" depth="0.05" color="#f7f5ee"></a-box>
+    <a-box position="-2.5 2 -8.77" width="2.8" height="0.07" depth="0.05" color="#f7f5ee"></a-box>
+    <a-box position="2.7 0.6 -8" width="3" height="1.2" depth="0.65" color="#997f61"></a-box>
+    <a-box position="2.6 1.9 -8.87" width="2.5" height="1.25" depth="0.1" color="#303c44"></a-box>
+    <a-box position="2.6 1.9 -8.79" width="2.3" height="1.06" depth="0.03" color="#71818a"></a-box>
+    <!-- Lighting -->
+    <a-entity light="type: ambient; intensity: 0.85; color: #fff5e6"></a-entity>
+    <a-entity light="type: directional; intensity: 0.65" position="-2 3 1"></a-entity>
   </a-entity>
   <a-entity position="0 0 0"><a-camera wasd-controls="enabled: false" look-controls="enabled: true"></a-camera></a-entity>
 </a-scene>
