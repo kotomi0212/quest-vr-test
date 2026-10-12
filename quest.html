@@ -18,9 +18,10 @@ const auth=firebase.auth(), db=firebase.database();
 const root=db.ref('sessions/'+appConfig.sessionId);
 let sceneReady=previewMode, firstCommand=true, active=null, lastCommandSeq=0;
 let headsetUser=null, currentAngle=0;
+let anklePivot=new THREE.Vector3(0,0.08,0), calibrated=previewMode;
 const info=()=>document.querySelector('#status');
 function showStatus(msg){const n=info();if(n)n.textContent=msg;}
-function setRotation(deg){ currentAngle=deg; const room=document.querySelector('#visual-world'); if(room)room.object3D.rotation.x=deg*Math.PI/180; }
+function setRotation(deg){ currentAngle=deg; const room=document.querySelector('#visual-world'); if(room){room.object3D.rotation.x=deg*Math.PI/180;const rotated=anklePivot.clone().applyAxisAngle(new THREE.Vector3(1,0,0),deg*Math.PI/180);room.object3D.position.copy(anklePivot).sub(rotated);} }
 function safeName(name){ return /^[a-zA-Z0-9_.-]+\.csv$/.test(name)&&!name.includes('..'); }
 function parseCsv(content){
  const lines=content.trim().split(/\r?\n/);const points=[];
@@ -49,7 +50,7 @@ async function finish(reason='completed'){
  const payload={mode:trial.cmd.mode,frequencyHz:trial.cmd.frequencyHz||0,amplitudeDeg:trial.cmd.amplitudeDeg||0,
  durationSec:trial.cmd.durationSec, runId:trial.cmd.runId, reason,
  startedAtQuestWallClockMs:trial.startedWallMs, endedAtQuestWallClockMs:Date.now(),
- samples:trial.samples, csvFile:trial.cmd.csvFile||null,
+ anklePivotM:anklePivot.toArray(),heightCm:trial.cmd.heightCm||null,eyeHeightM:trial.cmd.eyeHeightM||null,samples:trial.samples, csvFile:trial.cmd.csvFile||null,
  note:'Quest Date.now is not automatically synchronized with other sensors. samples=[elapsed_ms, visual_world_rotation_deg]'};
  if(previewMode)return;
  try{await root.child('logs/'+headsetUser.uid+'/'+trial.cmd.runId).set(payload);}catch(e){showStatus('ログ保存失敗: '+e.message);console.error(e);}
@@ -57,9 +58,19 @@ async function finish(reason='completed'){
 async function handleCommand(cmd){
  if(!cmd||!Number.isFinite(cmd.seq)||cmd.seq<=lastCommandSeq)return;
  lastCommandSeq=cmd.seq;
+ if(cmd.type==='calibrate'){
+ if(!sceneReady){showStatus('先にVRに入ってください');return;}
+ if(active){showStatus('停止してから位置合わせしてください');return;}
+ const cam=document.querySelector('a-camera');
+ if(previewMode){cam.setAttribute('position',{x:0,y:Number(cmd.eyeHeightM)||1.5,z:0});anklePivot.set(0,Number(cmd.ankleHeightM)||0,0);}
+ else{const v=new THREE.Vector3();cam.object3D.getWorldPosition(v);anklePivot.set(v.x,Number(cmd.ankleHeightM)||0,v.z);}
+ calibrated=true;setRotation(0);showStatus('足首位置合わせ完了（頭の真下で近似）');ack('ready',{calibrated:true,anklePivot:anklePivot.toArray()});return;
+ }
  if(cmd.type==='stop'){await finish('stopped');return;}
  if(cmd.type!=='start')return;
  if(!sceneReady){showStatus('VRに入ってから開始してください');ack('blocked',{error:'enter VR before START'});return;}
+ if(!calibrated){showStatus('PCで立ち位置を合わせてください');ack('blocked',{error:'立ち位置合わせが必要です'});return;}
+ if(previewMode){document.querySelector('a-camera').setAttribute('position',{x:0,y:Number(cmd.eyeHeightM)||1.5,z:0});anklePivot.set(0,Number(cmd.ankleHeightM)||0,0);}
  if(active)await finish('replaced');
  const trial={cmd:{...cmd},samples:[],startedPerf:null,startedWallMs:null,preludePerf:performance.now(),points:null};
  if(cmd.mode==='csv'){
@@ -102,8 +113,8 @@ window.addEventListener('load',()=>{
 
  const scene=document.querySelector('a-scene');
  if(previewMode){document.querySelector('#info').style.display='none';scene.setAttribute('vr-mode-ui','enabled',false);}
- scene.addEventListener('enter-vr',()=>{sceneReady=true;showStatus('VR準備完了。PCのSTART待ち');ack('ready');});
- scene.addEventListener('exit-vr',()=>{sceneReady=false;void finish('vr-exited');showStatus('VR終了。再度Enter VRしてください');});
+ scene.addEventListener('enter-vr',()=>{sceneReady=true;showStatus('室内版 v4：PCで立ち位置を合わせてください');ack('ready',{calibrated:false});});
+ scene.addEventListener('exit-vr',()=>{sceneReady=false;calibrated=previewMode;void finish('vr-exited');showStatus('VR終了。再度Enter VRしてください');});
 });
 (previewMode ? new Promise(resolve=>auth.onAuthStateChanged(user=>{if(user)resolve({user});})) : auth.signInAnonymously()).then(cred=>{
  headsetUser=cred.user;showStatus(previewMode?'PC刺激プレビュー':'Firebase 接続済み。QuestでEnter VRを押してください');
@@ -115,10 +126,10 @@ window.addEventListener('load',()=>{
 }).catch(e=>showStatus('Firebase認証エラー: '+e.message));
 </script>
 </head><body>
-<div id="info"><b>視覚刺激パイロット（未検証の実験補助ツール）</b>
+<div id="info"><b>室内版 v4・足首位置合わせ対応</b>
 <span id="status">接続中...</span>
 <small>まずQuest内で「Enter VR」を押し、その後PCで開始してください。固定・転倒防止は別途必要です。</small></div>
-<a-scene stimulus-driver background="color: #e8eef7" vr-mode-ui="enabled: true">
+<a-scene webxr="referenceSpaceType: local-floor" stimulus-driver background="color: #e8eef7" vr-mode-ui="enabled: true">
   <!-- Approximate modern room: dimensions and furnishings are design choices, not recovered from the paper. Origin = ankle/floor. -->
   <a-entity id="visual-world">
     <a-box position="0 -0.06 -3" width="10" height="0.12" depth="12" color="#b59b7c"></a-box>
@@ -154,4 +165,6 @@ window.addEventListener('load',()=>{
   </a-entity>
   <a-entity position="0 0 0"><a-camera wasd-controls="enabled: false" look-controls="enabled: true"></a-camera></a-entity>
 </a-scene>
+ 
+ 
 </body></html>
