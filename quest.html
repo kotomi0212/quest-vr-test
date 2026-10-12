@@ -10,12 +10,13 @@
 <style>body{margin:0;font-family:system-ui;background:#edf4f7}#info{position:fixed;top:8px;left:8px;z-index:10;background:#ffffffdc;border-radius:9px;padding:10px 14px;max-width:440px;font-size:14px}#info b{display:block}#info small{display:block}</style>
 <script>
 'use strict';
+const previewMode=new URLSearchParams(location.search).has('preview');
 const appConfig=window.VR_REMOTE_CONFIG;
 if(!appConfig){alert('firebase-config.js がありません');throw Error('config missing');}
 firebase.initializeApp(appConfig.firebase);
 const auth=firebase.auth(), db=firebase.database();
 const root=db.ref('sessions/'+appConfig.sessionId);
-let sceneReady=false, firstCommand=true, active=null, lastCommandSeq=0;
+let sceneReady=previewMode, firstCommand=true, active=null, lastCommandSeq=0;
 let headsetUser=null, currentAngle=0;
 const info=()=>document.querySelector('#status');
 function showStatus(msg){const n=info();if(n)n.textContent=msg;}
@@ -38,7 +39,7 @@ function interp(points, time){
  return p[1]+u*(q[1]-p[1]);
 }
 function ack(status,detail={}){
- if(!headsetUser)return;
+ if(previewMode||!headsetUser)return;
  root.child('status').set({status,...detail,at:firebase.database.ServerValue.TIMESTAMP,questUid:headsetUser.uid}).catch(console.error);
 }
 async function finish(reason='completed'){
@@ -50,6 +51,7 @@ async function finish(reason='completed'){
  startedAtQuestWallClockMs:trial.startedWallMs, endedAtQuestWallClockMs:Date.now(),
  samples:trial.samples, csvFile:trial.cmd.csvFile||null,
  note:'Quest Date.now is not automatically synchronized with other sensors. samples=[elapsed_ms, visual_world_rotation_deg]'};
+ if(previewMode)return;
  try{await root.child('logs/'+headsetUser.uid+'/'+trial.cmd.runId).set(payload);}catch(e){showStatus('ログ保存失敗: '+e.message);console.error(e);}
 }
 async function handleCommand(cmd){
@@ -88,11 +90,12 @@ AFRAME.registerComponent('stimulus-driver',{
 });
 window.addEventListener('load',()=>{
  const scene=document.querySelector('a-scene');
+ if(previewMode){document.querySelector('#info').style.display='none';scene.setAttribute('vr-mode-ui','enabled',false);}
  scene.addEventListener('enter-vr',()=>{sceneReady=true;showStatus('VR準備完了。PCのSTART待ち');ack('ready');});
  scene.addEventListener('exit-vr',()=>{sceneReady=false;void finish('vr-exited');showStatus('VR終了。再度Enter VRしてください');});
 });
-auth.signInAnonymously().then(cred=>{
- headsetUser=cred.user;showStatus('Firebase 接続済み。QuestでEnter VRを押してください');
+(previewMode ? new Promise(resolve=>auth.onAuthStateChanged(user=>{if(user)resolve({user});})) : auth.signInAnonymously()).then(cred=>{
+ headsetUser=cred.user;showStatus(previewMode?'PC刺激プレビュー':'Firebase 接続済み。QuestでEnter VRを押してください');
  root.child('command').on('value',snap=>{
   const c=snap.val();if(firstCommand){firstCommand=false;lastCommandSeq=c?.seq||0;return;}
   void handleCommand(c);
