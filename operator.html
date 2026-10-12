@@ -1,0 +1,50 @@
+<!doctype html><html lang="ja"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Quest リモート操作画面</title>
+<script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-app-compat.js"></script>
+<script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-auth-compat.js"></script>
+<script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-database-compat.js"></script>
+<script src="firebase-config.js"></script>
+<style>body{font:16px system-ui;max-width:720px;margin:32px auto;padding:0 18px;background:#f6f8fa;color:#172233}h1{font-size:24px}section{background:white;border:1px solid #dee3eb;border-radius:12px;padding:18px;margin:15px 0}label{display:block;font-weight:650;margin:10px 0 4px}input,select,button{padding:10px;border:1px solid #b4beca;border-radius:7px;font:inherit;box-sizing:border-box}input,select{width:100%}button{cursor:pointer;background:#e9eef5}button.primary{background:#226f9e;color:#fff;border-color:#226f9e}button.danger{background:#ab3131;color:#fff;border-color:#ab3131}.controls{display:grid;grid-template-columns:1fr 1fr;gap:10px}.muted{color:#556477;font-size:13px}#state{font-weight:700;color:#1d6b4d}#log{white-space:pre-wrap;font-size:13px}</style>
+</head><body>
+<h1>Quest 視覚刺激：PC操作画面</h1>
+<p class="muted">これは試験用の遠隔制御UIです。A-Frameの刺激と研究用データの同期・刺激妥当性は別途検証してください。</p>
+<section id="login"><h2>1. 実験者ログイン</h2><label>Firebase Auth のメール</label><input id="email" type="email" autocomplete="username"><label>パスワード</label><input id="password" type="password" autocomplete="current-password"><p><button id="signIn" class="primary">ログイン</button></p><div id="authState"></div></section>
+<section id="control" style="display:none"><h2>2. 刺激設定と操作</h2><p>Questの状態：<span id="state">確認中</span></p>
+<label>刺激</label><select id="mode"><option value="baseline">Baseline（静止VR）</option><option value="sine">正弦波（動作確認用）</option><option value="csv">CSV波形を再生</option></select>
+<label>正弦波の周波数 (Hz)</label><input id="freq" type="number" min="0.01" max="2" step="0.01" value="0.2">
+<label>正弦波振幅 (片振幅、度)</label><input id="amp" type="number" min="0" max="20" step="0.5" value="5">
+<label>再生時間 (秒)</label><input id="duration" type="number" min="5" max="600" step="5" value="60">
+<label>CSVファイル名（CSVモードのみ）</label><input id="csvFile" value="demo_not_ghiasi_trapv.csv">
+<p class="muted">CSV形式：time_s,angle_deg。Questのページと同じフォルダに配置。例CSVは原論文の厳密な再現ではありません。</p>
+<div class="controls"><button id="start" class="primary">START（3秒後開始）</button><button id="stop" class="danger">STOP（緊急停止）</button></div>
+<p id="log"></p><p><button id="download">Questが保存した刺激ログを取得（JSON）</button></p>
+</section>
+<script>
+'use strict';
+const config=window.VR_REMOTE_CONFIG;
+firebase.initializeApp(config.firebase);
+const auth=firebase.auth(),db=firebase.database(),root=db.ref('sessions/'+config.sessionId);
+const $=id=>document.getElementById(id);
+const tell=msg=>{$('log').textContent=msg;};
+$('signIn').onclick=async()=>{try{await auth.signInWithEmailAndPassword($('email').value,$('password').value);$('authState').textContent='ログインしました';}catch(e){$('authState').textContent='エラー: '+e.message;}};
+auth.onAuthStateChanged(user=>{if(!user||user.isAnonymous)return;$('login').style.display='none';$('control').style.display='block';
+ root.child('status').on('value',s=>{const v=s.val();$('state').textContent=v?(v.status+' / '+(v.runId||v.lastRunId||'-')):'Quest未接続';});
+});
+async function dispatch(type){
+ const frequencyHz=Number($('freq').value), amplitudeDeg=Number($('amp').value),durationSec=Number($('duration').value);
+ if(type==='start'&&(!Number.isFinite(durationSec)||durationSec<5||durationSec>600)){tell('再生時間が不正');return;}
+ const mode=$('mode').value;
+ const obj={type,mode,frequencyHz,amplitudeDeg,durationSec, csvFile:$('csvFile').value.trim(),seq:Date.now(),
+ runId:'trial-'+Date.now(),requestedAt:firebase.database.ServerValue.TIMESTAMP};
+ try{await root.child('command').set(obj);tell('送信済み: '+type+'（Questに届いたかは状態表示を確認）');}
+ catch(e){tell('送信エラー: '+e.message);}
+}
+$('start').onclick=()=>dispatch('start');$('stop').onclick=()=>dispatch('stop');
+$('download').onclick=async()=>{
+ try{const s=await root.child('logs').get();const obj=s.val()||{};
+ const blob=new Blob([JSON.stringify(obj,null,2)],{type:'application/json'});
+ const a=document.createElement('a');a.href=URL.createObjectURL(blob);a.download='quest-stimulus-logs-'+config.sessionId+'.json';a.click();
+ setTimeout(()=>URL.revokeObjectURL(a.href),1000);tell('ログを取得しました。研究用IMUのタイムスタンプとの同期は別途必要です。');
+ }catch(e){tell('取得エラー: '+e.message);}
+};
+</script></body></html>
