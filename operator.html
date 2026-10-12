@@ -10,7 +10,7 @@
 <p class="muted">これは試験用の遠隔制御UIです。A-Frameの刺激と研究用データの同期・刺激妥当性は別途検証してください。</p>
 <section id="login"><h2>1. 実験者ログイン</h2><label>Firebase Auth のメール</label><input id="email" type="email" autocomplete="username"><label>パスワード</label><input id="password" type="password" autocomplete="current-password"><p><button id="signIn" class="primary">ログイン</button></p><div id="authState"></div></section>
 <section id="control" style="display:none"><h2>2. 刺激設定と操作</h2><p>Questの状態：<span id="state">確認中</span></p>
-<h3>Questで提示する刺激のプレビュー</h3><iframe id="preview" title="VR刺激プレビュー"></iframe><p class="muted">正面から見た同じVR空間です。Questの頭の向き・実際の表示タイミングは一致しません。</p><p><b>室内版 v4・足首位置合わせ対応</b></p><label>身長（cm・記録用）</label><input id="heightCm" type="number" value="160" min="100" max="220"><label>目の高さ（床からcm・PCプレビュー用）</label><input id="eyeCm" type="number" value="150" min="80" max="210"><label>足首の回転軸の高さ（床からcm）</label><input id="ankleCm" type="number" value="8" min="0" max="20"><p><button id="calibrate">立ち位置を合わせる</button></p><p class="muted">QuestでVRに入り、実験位置で直立して正面を向いた状態で押してください。足首の前後・左右位置は頭の真下で近似します。</p><label>刺激</label><select id="mode"><option value="baseline">Baseline（静止VR）</option><option value="sine">正弦波（動作確認用）</option><option value="csv">CSV波形を再生</option></select>
+<h3>Questで提示する刺激のプレビュー</h3><iframe id="preview" title="VR刺激プレビュー"></iframe><p class="muted">正面から見た同じVR空間です。Questの頭の向き・実際の表示タイミングは一致しません。</p><p><b>室内版・VR起動修正版</b></p><label>身長（cm・記録用）</label><input id="heightCm" type="number" value="160" min="100" max="220"><label>目の高さ（床からcm・PCプレビュー用）</label><input id="eyeCm" type="number" value="150" min="80" max="210"><label>足首の回転軸の高さ（床からcm）</label><input id="ankleCm" type="number" value="8" min="0" max="20"><p><button id="calibrate">立ち位置を合わせる</button></p><p class="muted">QuestでVRに入り、実験位置で直立して正面を向いた状態で押してください。足首の前後・左右位置は頭の真下で近似します。</p><label>刺激</label><select id="mode"><option value="baseline">Baseline（静止VR）</option><option value="sine">正弦波（動作確認用）</option><option value="csv">CSV波形を再生</option></select>
 <label>正弦波の周波数 (Hz)</label><input id="freq" type="number" min="0.01" max="2" step="0.01" value="0.2">
 <label>正弦波振幅 (片振幅、度)</label><input id="amp" type="number" min="0" max="20" step="0.5" value="5">
 <label>再生時間 (秒)</label><input id="duration" type="number" min="5" max="600" step="5" value="60">
@@ -27,20 +27,20 @@ const auth=firebase.auth(),db=firebase.database(),root=db.ref('sessions/'+config
 const $=id=>document.getElementById(id);
 const tell=msg=>{$('log').textContent=msg;};
 $('signIn').onclick=async()=>{try{await auth.signInWithEmailAndPassword($('email').value,$('password').value);$('authState').textContent='ログインしました';}catch(e){$('authState').textContent='エラー: '+e.message;}};
-auth.onAuthStateChanged(user=>{if(!user||user.isAnonymous)return;$('login').style.display='none';$('control').style.display='block';if(!$('preview').getAttribute('src'))$('preview').src='quest.html?preview=1&v=room-calibration4';
- root.child('status').on('value',s=>{const v=s.val();if(v&&['countdown','running','idle','blocked'].includes(v.status)){tell(({countdown:'Questが開始を受信：3秒の待機中',running:'Questで再生中',idle:'Questで停止・終了しました',blocked:'Questで開始できません：'+(v.error||'状態を確認してください')})[v.status]);}$('state').textContent=v?(v.status+' / '+(v.runId||v.lastRunId||'-')):'Quest未接続';});
+auth.onAuthStateChanged(user=>{if(!user||user.isAnonymous)return;$('login').style.display='none';$('control').style.display='block';if(!$('preview').getAttribute('src'))$('preview').src='quest.html?preview=1';
+ root.child('status').on('value',s=>{const v=s.val();if(v&&['countdown','running','idle','blocked','ready'].includes(v.status)){tell(({ready:v.calibrated?'✓ Questの位置合わせが完了しました':'QuestでVR開始済み。立ち位置を合わせてください',countdown:'Questが開始を受信：3秒の待機中',running:'Questで再生中',idle:'Questで停止・終了しました',blocked:'Questで開始できません：'+(v.error||'状態を確認してください')})[v.status]);}$('state').textContent=v?(v.status+' / '+(v.runId||v.lastRunId||'-')):'Quest未接続';});
 });
 async function dispatch(type){
  const button=$(type==='start'?'start':type==='calibrate'?'calibrate':'stop');const original=button.textContent;
  tell(type==='start'?'▶ STARTを押しました':type==='calibrate'?'位置合わせを送信中':'■ STOPを押しました');
- button.textContent=type==='start'?'▶ 送信中…':'■ 停止を送信中…';button.disabled=true;
+ button.textContent=type==='start'?'▶ 送信中…':type==='calibrate'?'位置合わせを送信中…':'■ 停止を送信中…';button.disabled=true;
  try{
  const frequencyHz=Number($('freq').value), amplitudeDeg=Number($('amp').value),durationSec=Number($('duration').value);
  if(type==='start'&&(!Number.isFinite(durationSec)||durationSec<5||durationSec>600)){tell('再生時間が不正');return;}
  const mode=$('mode').value;
  const obj={heightCm:Number($('heightCm').value),eyeHeightM:Number($('eyeCm').value)/100,ankleHeightM:Number($('ankleCm').value)/100,type,mode,frequencyHz,amplitudeDeg,durationSec, csvFile:$('csvFile').value.trim(),seq:Date.now(),
  runId:'trial-'+Date.now(),requestedAt:firebase.database.ServerValue.TIMESTAMP};
- try{await root.child('command').set(obj);tell(type==='start'?'✓ START送信済み・Questの開始確認待ち':type==='calibrate'?'✓ 位置合わせ送信済み':'✓ STOP送信済み・Questの停止確認待ち');}
+ try{const pending=$('log').textContent;await root.child('command').set(obj);if($('log').textContent===pending)tell(type==='start'?'✓ START送信済み・Questの開始確認待ち':type==='calibrate'?'✓ 位置合わせ送信済み':'✓ STOP送信済み・Questの停止確認待ち');}
  catch(e){tell('送信エラー: '+e.message);}
  }finally{button.disabled=false;button.textContent=original;}
 }
