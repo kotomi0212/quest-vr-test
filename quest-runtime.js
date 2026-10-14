@@ -16,13 +16,16 @@
   const pivot = new THREE.Vector3(0, 0.088, 0);
   const show = message => { document.querySelector('#status').textContent = message; };
   const immersive = () => !!(scene.renderer?.xr.isPresenting &&
-    scene.renderer.xr.getSession() && scene.is('vr-mode') && !scene.is('ar-mode'));
+    scene.renderer.xr.getSession() && !scene.is('ar-mode'));
   const rendered = () => !!(scene.renderStarted && scene.camera && !graphicsLost);
   const ready = () => rendered() && (preview || immersive());
   function diagnostics() {
     return { instanceId, loaded: !!scene.hasLoaded, renderStarted: rendered(),
       vrButton: !!scene.querySelector('.a-enter-vr-button'), secureContext: isSecureContext,
       xrSupport, immersive: immersive(), calibrated, calibration, firebaseState,
+      xrPresenting: !!scene.renderer?.xr.isPresenting,
+      xrSessionActive: !!scene.renderer?.xr.getSession(),
+      aframeVR: scene.is('vr-mode'), client: navigator.userAgent || 'unknown',
       appliedAngleDeg: active?.actualAngle || 0, startupError: window.vrLastError || '' };
   }
   function updateDiagnostics() {
@@ -134,12 +137,13 @@
       block('古いコマンドです。PCから再送してください'); return;
     }
     syncXR();
-    if (!ready()) { block(rendered() ? 'enter VR before START（immersive-vr未開始）' : '3D描画の初期化が未完了です'); return; }
     if (c.type === 'configure') {
+      if (!rendered()) { block('3D描画の初期化が未完了です'); return; }
       if (active || pending) { block('映像変更はSTOP後に行ってください'); return; }
       if (!['room','grid','checker','stripes'].includes(c.pattern)) { block('映像パターン不正'); return; }
-      selectPattern(c.pattern); ack('ready', { pattern: c.pattern }); return;
+      selectPattern(c.pattern); ack(ready() ? 'ready' : 'connected', { pattern: c.pattern, configured: true }); return;
     }
+    if (!ready()) { block(rendered() ? 'enter VR before START（immersive-vr未開始）' : '3D描画の初期化が未完了です'); return; }
     if (c.type === 'calibrate') {
       if (active || pending) { block('STOPしてから位置合わせしてください'); return; }
       if (!Number.isFinite(c.heightCm) || c.heightCm < 100 || c.heightCm > 220) { block('身長が範囲外です'); return; }

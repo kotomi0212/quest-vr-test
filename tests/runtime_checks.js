@@ -58,5 +58,21 @@ async function flush(){await Promise.resolve();await Promise.resolve();}
  command('configure',{pattern:'room'});await flush();assert.equal(room.object3D.visible,true);assert.equal(surround.object3D.visible,false);
  command('configure',{pattern:'grid'});await flush();assert.equal(surround.object3D.visible,true);
  assert.equal(window.vrLastError,'');
+ // Non-preview production command path: static scene changes need no XR,
+ // but calibration/START still require a real presenting session boundary.
+ const ctx=vm.createContext({...sandbox,location:{search:'',origin:'http://test'},structuredClone});
+ document.head={appendChild(script){script.onload();}};
+ window.VR_REMOTE_CONFIG={firebase:{},sessionId:'test'};
+ vm.runInContext(fs.readFileSync(require('node:path').join(__dirname,'firebase-fixture.js'),'utf8'),ctx);
+ ctx.firebase=window.firebase;
+ vm.runInContext(fs.readFileSync(require('node:path').join(__dirname,'../quest-runtime.js'),'utf8'),ctx);
+ events.load();for(let i=0;i<30;i++)await flush();
+ const fixture=window.fixture, commandPath='sessions/test/command';
+ function headset(type,extra={}){fixture.emit(commandPath,{type,seq:++seq,questInstanceId:fixture.lastStatus().instanceId,requestedAt:Date.now(),pattern:'grid',heightCm:160,ankleHeightM:.088,...extra});}
+ headset('configure');await flush();assert.equal(fixture.lastStatus().configured,true);assert.equal(fixture.lastStatus().immersive,false);
+ headset('calibrate');await flush();assert.equal(fixture.lastStatus().status,'blocked');
+ scene.renderer.xr.isPresenting=true;scene.renderer.xr.getSession=()=>({addEventListener(){}});
+ scene.renderer.xr.getCamera=()=>({getWorldPosition:head=>head.set(0,1.6,0)});
+ headset('calibrate');await flush();assert.equal(fixture.lastStatus().calibrated,true);assert.equal(fixture.lastStatus().immersive,true);assert.equal(fixture.lastStatus().aframeVR,false);
  console.log('PASS: production Quest ticks move TrapV/sin/legacy CSV, smooth STOP, emergency STOP, grid mesh/white surround, idle scene switching');
 })().catch(e=>{console.error(e);process.exitCode=1;});

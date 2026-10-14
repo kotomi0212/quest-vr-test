@@ -21,6 +21,9 @@ listeners['sessions/test/status']({val:()=>({instanceId:'quest',at:Date.now(),fi
  await nodes.stop.onclick();assert.equal(writes.at(-1).type,'return');
  await nodes.emergency.onclick();assert.equal(writes.at(-1).type,'emergency');
  nodes.pattern.value='room';await nodes.pattern.onchange();assert.equal(writes.at(-1).type,'configure');assert.equal(writes.at(-1).pattern,'room');
+ listeners['sessions/test/status']({val:()=>({instanceId:'quest',at:Date.now(),firebaseState:'接続済み',immersive:false,renderStarted:true,calibrated:false,xrPresenting:false,xrSessionActive:false})});
+ nodes.pattern.value='grid';await nodes.applyPattern.onclick();assert.equal(writes.at(-1).type,'configure');assert.equal(writes.at(-1).pattern,'grid');
+ const count=writes.length;await nodes.start.onclick();assert.equal(writes.length,count);assert(nodes.log.textContent.includes('実VRセッション'));
  assert(!html.includes('option value="csv"'));assert(!html.includes('option value="baseline"'));assert(!html.includes('option value="checker"'));
  console.log('PASS: operator DOM references, TrapV/sin/Baseline commands, STOP/emergency, idle pattern command, simplified selectors');
 })().catch(e=>{console.error(e);process.exitCode=1;});
