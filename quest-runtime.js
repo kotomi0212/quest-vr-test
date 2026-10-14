@@ -22,7 +22,8 @@
   function diagnostics() {
     return { instanceId, loaded: !!scene.hasLoaded, renderStarted: rendered(),
       vrButton: !!scene.querySelector('.a-enter-vr-button'), secureContext: isSecureContext,
-      xrSupport, immersive: immersive(), calibrated, calibration, firebaseState, startupError: window.vrLastError || '' };
+      xrSupport, immersive: immersive(), calibrated, calibration, firebaseState,
+      appliedAngleDeg: active?.actualAngle || 0, startupError: window.vrLastError || '' };
   }
   function updateDiagnostics() {
     const d = diagnostics();
@@ -41,18 +42,20 @@
   }
   // One static mipmapped texture and one mesh; no per-frame texture regeneration.
   function selectPattern(pattern) {
+    // Old clients used checker/stripes; both now resolve to the requested grid.
+    pattern = pattern === 'room' ? 'room' : 'grid';
     scene.querySelector('#room-pattern').object3D.visible = pattern === 'room';
+    scene.querySelector('#contrast-surround').object3D.visible = pattern !== 'room';
     const el = scene.querySelector('#contrast-pattern');
     el.object3D.visible = pattern !== 'room';
+    el.object3D.position.set(pivot.x, 0, pivot.z);
     if (pattern === 'room' || el.dataset.pattern === pattern) return;
     el.dataset.pattern = pattern;
     const old = el.getObject3D('mesh');
     if(old) { old.geometry.dispose(); old.material.map.dispose(); old.material.dispose(); }
-    const canvas=document.createElement('canvas'); canvas.width=1024; canvas.height=1024;
+    const canvas=document.createElement('canvas'); canvas.width=1024; canvas.height=2048;
     const ctx=canvas.getContext('2d');
-    for(let y=0;y<16;y++) for(let x=0;x<16;x++) {
-      ctx.fillStyle=(pattern==='stripes'?x:x+y)%2?'#fff':'#000'; ctx.fillRect(x*64,y*64,64,64);
-    }
+    Stimulus.drawGrid(ctx, canvas.width, canvas.height);
     const texture=new THREE.CanvasTexture(canvas); texture.anisotropy=Math.min(8,scene.renderer?.capabilities.getMaxAnisotropy() || 1);
     const geometry=new THREE.CylinderGeometry(1,1,6,96,1,true,Math.PI/2,Math.PI);
     const mesh=new THREE.Mesh(geometry,new THREE.MeshBasicMaterial({map:texture,side:THREE.DoubleSide}));
@@ -132,6 +135,11 @@
     }
     syncXR();
     if (!ready()) { block(rendered() ? 'enter VR before START（immersive-vr未開始）' : '3D描画の初期化が未完了です'); return; }
+    if (c.type === 'configure') {
+      if (active || pending) { block('映像変更はSTOP後に行ってください'); return; }
+      if (!['room','grid','checker','stripes'].includes(c.pattern)) { block('映像パターン不正'); return; }
+      selectPattern(c.pattern); ack('ready', { pattern: c.pattern }); return;
+    }
     if (c.type === 'calibrate') {
       if (active || pending) { block('STOPしてから位置合わせしてください'); return; }
       if (!Number.isFinite(c.heightCm) || c.heightCm < 100 || c.heightCm > 220) { block('身長が範囲外です'); return; }
@@ -145,6 +153,7 @@
       pivot.set(head.x, c.ankleHeightM, head.z);
       calibration = { heightCm: c.heightCm || null, measuredEyeHeightM: preview ? null : head.y, estimatedAnkleHeightM: (c.heightCm || 160)/100*.039, manualAnkleHeightM: c.ankleHeightM, referenceSpace: 'local-floor requested; verify floor on device', calibratedAtMs: Date.now() };
       calibrated = true; rotate(0); show('位置合わせ完了（足首の前後・左右は頭の真下で近似）');
+      selectPattern(c.pattern || 'room');
       ack('ready', { anklePivotM: pivot.toArray(), calibration }); return;
     }
     if (c.type !== 'start') return;
@@ -158,7 +167,7 @@
     if (active || pending) { block('STOP後に次の条件を開始してください'); return; }
     if (c.mode === 'trapv') { try { Stimulus.trap(c); } catch(e) { block(e.message); return; } }
     if (c.mode === 'sine' && 2*Math.PI*c.frequencyHz*c.amplitudeDeg > Stimulus.limits.velocity) { block('角速度上限30°/sを超えます'); return; }
-    if (c.pattern && !['room','checker','stripes'].includes(c.pattern)) { block('映像パターン不正'); return; }
+    if (c.pattern && !['room','grid','checker','stripes'].includes(c.pattern)) { block('映像パターン不正'); return; }
     finish('replaced');
     selectPattern(c.pattern || 'room');
     const token = generation;
@@ -206,8 +215,12 @@
       }
       const t = (now - active.startedPerf) / 1000, c = active.cmd;
       if (t >= c.durationSec) { finish(); return; }
-      const degrees = c.mode === 'sine' ? c.amplitudeDeg * Math.sin(2 * Math.PI * c.frequencyHz * t) :
-        c.mode === 'csv' ? interpolate(active.points, t) : 0;
+      const commanded = Stimulus.angle(c, t, active.points);
+      const dt = Math.max(0, Math.min((now - (active.lastFrame ?? now)) / 1000, .1));
+      const previous = active.actualAngle || 0;
+      const target = commanded * Math.min(1, t / 1.5, Math.max(0, (c.durationSec - t) / 1.5));
+      const degrees = previous + Math.max(-30 * dt, Math.min(30 * dt, target - previous));
+      active.lastFrame = now; active.actualAngle = degrees;
       rotate(degrees); active.samples.push([Math.round(t * 1000), Math.round(degrees * 100000) / 100000, commanded, now, performance.timeOrigin + now]);
     }
   });

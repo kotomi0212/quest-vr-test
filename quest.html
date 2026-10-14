@@ -116,9 +116,11 @@ window.addEventListener('unhandledrejection',e=>reportStartupError([e.reason?.me
   </a-entity>
     <a-entity id="contrast-pattern" visible="false"></a-entity>
   </a-entity>
+  <!-- Keep the unpatterned surround white in immersive VR as well as desktop. -->
+  <a-sky id="contrast-surround" color="#ffffff" material="shader: flat" visible="false"></a-sky>
   <a-entity position="0 0 0"><a-camera wasd-controls="enabled: false" look-controls="enabled: true"></a-camera></a-entity>
 </a-scene>
 </template>
-<script defer src="stimulus-engine.js"></script>
-<script defer src="quest-runtime.js"></script>
+<script defer src="stimulus-engine.js?v=20261014-gridfix1"></script>
+<script defer src="quest-runtime.js?v=20261014-gridfix1"></script>
 </body></html>

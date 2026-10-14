@@ -36,6 +36,15 @@
     return p[a][1]+(t-p[a][0])/(p[b][0]-p[a][0])*(p[b][1]-p[a][1]);
   }
   function angle(c,t,p) { return c.mode==='trapv'?trapAngle(c,t):c.mode==='sine'?c.amplitudeDeg*Math.sin(2*Math.PI*c.frequencyHz*t):c.mode==='csv'?interpolate(p,t):0; }
-  const api={limits,trap,trapAngle,parseCsv,interpolate,angle}; scope.Stimulus=api;
+  function drawGrid(ctx, width, height) {
+    // Thin black horizontal/vertical stripes on white, not alternating tiles.
+    // 32 columns over pi metres and 60 rows over six metres: ~10 cm spacing.
+    ctx.fillStyle='#fff'; ctx.fillRect(0,0,width,height);
+    ctx.fillStyle='#000';
+    const dx=width/32, dy=height/60;
+    for(let x=0;x<=32;x++) ctx.fillRect(x*dx-dx*.08,0,dx*.16,height);
+    for(let y=0;y<=60;y++) ctx.fillRect(0,y*dy-dy*.08,width,dy*.16);
+  }
+  const api={limits,trap,trapAngle,parseCsv,interpolate,angle,drawGrid}; scope.Stimulus=api;
   if(typeof module!=='undefined') module.exports=api;
 })(globalThis);
