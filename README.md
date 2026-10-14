@@ -1,5 +1,9 @@
 # Quest remote visual stimulus pilot
 
+## 2026-10-14 update
+
+See [日本語の改修結果・操作手順・検証限界](IMPLEMENTATION-ja.md) for the current behavior. The default operator stimulus is now a configurable TrapV-like velocity profile, with a high-contrast front semicylinder and the existing room available as scene options. These are alternatives, not verified reproductions of Ghiasi/Train. Normal STOP returns to zero over two seconds; the separate emergency button resets immediately. Stop before changing trial conditions. Run `node tests/stimulus_checks.js` for the dependency-free math/path checks. The older sections below describe the original implementation; current logging includes commanded and applied software angles and monotonic timestamps, but external sensor synchronization remains unimplemented.
+
 `operator.html` controls `quest.html` through Firebase Realtime Database. GitHub Pages publishes `main`. Use the existing URLs; the Quest URL needs no query string.
 
 ## Headset check

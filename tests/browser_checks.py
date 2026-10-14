@@ -280,7 +280,7 @@ class BrowserChecks(unittest.TestCase):
         self.assertEqual(self.status()['status'], 'idle')
         self.assertTrue(self.status()['immersive'])
 
-    def test_replacing_trial_does_not_wait_for_log_upload(self):
+    def test_new_trial_after_stop_does_not_wait_for_log_upload(self):
         self.quest(); self.calibrated(); self.command('start')
         self.page.evaluate('fixture.holdLogs = true')
         self.command('start', mode='baseline')
@@ -313,7 +313,7 @@ class BrowserChecks(unittest.TestCase):
         self.assertGreater(abs(self.page.frames[1].evaluate("document.querySelector('#visual-world').object3D.rotation.x")), .005)
         self.page.locator('#stop').click()
         self.page.wait_for_function("document.querySelector('#log').textContent.includes('STOP送信済み')")
-        self.page.frames[1].wait_for_function("document.querySelector('#visual-world').object3D.rotation.x===0")
+        self.page.frames[1].wait_for_function("document.querySelector('#visual-world').object3D.rotation.x===0", timeout=5000)
         self.assertEqual(self.page.frames[1].evaluate("document.querySelector('#visual-world').object3D.rotation.x"), 0)
         self.assertEqual(self.page.frames[1].evaluate('typeof firebase'), 'undefined')
         self.assertEqual(self.errors, [])

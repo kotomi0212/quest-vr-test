@@ -1,0 +1,41 @@
+/* Shared deterministic stimulus math. Degrees, seconds, metres. */
+(function (scope) {
+  'use strict';
+  const limits = Object.freeze({ angle: 20, velocity: 30, frequency: 2 });
+  function trap(c) {
+    const a = c.amplitudeDeg, v = c.velocityDegSec, r = c.rampSec, h = c.holdSec;
+    if (![a,v,r,h].every(Number.isFinite) || a <= 0 || a > limits.angle || v <= 0 || v > limits.velocity || r < .05 || h < 0 || h > 30 || v*r > a) throw Error('TrapV設定: 0<A≤20°, 0<V≤30°/s, ramp≥0.05s, V×ramp≤A');
+    const plateau = a/v-r, move = 2*r+plateau;
+    return { a,v,r,h,plateau,move,period:2*(move+h) };
+  }
+  function trapAngle(c,t) {
+    const p=trap(c), q=((t%p.period)+p.period)%p.period, half=p.move+p.h;
+    const returning=q>=half, s=returning?q-half:q;
+    let x;
+    if(s<p.r) x=p.v*s*s/(2*p.r);
+    else if(s<p.r+p.plateau) x=p.v*(s-p.r/2);
+    else if(s<p.move) x=p.a-p.v*(p.move-s)**2/(2*p.r);
+    else x=p.a;
+    return returning?p.a-x:x;
+  }
+  function parseCsv(content) {
+    const points=[];
+    for(const line of content.replace(/^\uFEFF/,'').trim().split(/\r?\n/)) {
+      const s=line.trim(); if(!s || s.startsWith('#') || /^time/i.test(s)) continue;
+      const cells=s.split(','); if(cells.length!==2 || cells.some(x=>!x.trim())) throw Error('CSV行が不正です');
+      const p=cells.map(Number), prev=points.at(-1);
+      if(!p.every(Number.isFinite) || p[0]<0 || Math.abs(p[1])>limits.angle || (prev && (p[0]<=prev[0] || Math.abs((p[1]-prev[1])/(p[0]-prev[0]))>limits.velocity))) throw Error('CSV時刻・角度・角速度が範囲外です');
+      points.push(p);
+    }
+    if(points.length<2 || points.length>20000 || points[0][0]!==0 || points[0][1]!==0) throw Error('CSVは原点(0,0)開始、2～20000行が必要です');
+    return points;
+  }
+  function interpolate(p,t) {
+    if(t<=p[0][0]) return p[0][1]; if(t>=p.at(-1)[0]) return p.at(-1)[1];
+    let a=0,b=p.length-1; while(a+1<b){const m=(a+b)>>1;if(p[m][0]<=t)a=m;else b=m;}
+    return p[a][1]+(t-p[a][0])/(p[b][0]-p[a][0])*(p[b][1]-p[a][1]);
+  }
+  function angle(c,t,p) { return c.mode==='trapv'?trapAngle(c,t):c.mode==='sine'?c.amplitudeDeg*Math.sin(2*Math.PI*c.frequencyHz*t):c.mode==='csv'?interpolate(p,t):0; }
+  const api={limits,trap,trapAngle,parseCsv,interpolate,angle}; scope.Stimulus=api;
+  if(typeof module!=='undefined') module.exports=api;
+})(globalThis);

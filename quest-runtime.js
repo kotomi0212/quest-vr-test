@@ -10,9 +10,10 @@
   let instanceId = crypto.randomUUID();
   let root, user, connected = false, hadConnection = false, serverOffset = 0;
   let active = null, pending = null, generation = 0, lastSeq = 0, commandSeq = null;
+  let calibration = null;
   let calibrated = preview, wasImmersive = false, graphicsLost = false, observedSession = null;
   let xrSupport = '確認中', firebaseState = preview ? 'プレビュー（接続なし）' : '準備中';
-  const pivot = new THREE.Vector3(0, 0.08, 0);
+  const pivot = new THREE.Vector3(0, 0.088, 0);
   const show = message => { document.querySelector('#status').textContent = message; };
   const immersive = () => !!(scene.renderer?.xr.isPresenting &&
     scene.renderer.xr.getSession() && scene.is('vr-mode') && !scene.is('ar-mode'));
@@ -21,7 +22,7 @@
   function diagnostics() {
     return { instanceId, loaded: !!scene.hasLoaded, renderStarted: rendered(),
       vrButton: !!scene.querySelector('.a-enter-vr-button'), secureContext: isSecureContext,
-      xrSupport, immersive: immersive(), calibrated, firebaseState, startupError: window.vrLastError || '' };
+      xrSupport, immersive: immersive(), calibrated, calibration, firebaseState, startupError: window.vrLastError || '' };
   }
   function updateDiagnostics() {
     const d = diagnostics();
@@ -37,6 +38,25 @@
       at: firebase.database.ServerValue.TIMESTAMP, questUid: user.uid }).catch(error => {
       firebaseState = '状態送信失敗'; updateDiagnostics(); console.error(error);
     });
+  }
+  // One static mipmapped texture and one mesh; no per-frame texture regeneration.
+  function selectPattern(pattern) {
+    scene.querySelector('#room-pattern').object3D.visible = pattern === 'room';
+    const el = scene.querySelector('#contrast-pattern');
+    el.object3D.visible = pattern !== 'room';
+    if (pattern === 'room' || el.dataset.pattern === pattern) return;
+    el.dataset.pattern = pattern;
+    const old = el.getObject3D('mesh');
+    if(old) { old.geometry.dispose(); old.material.map.dispose(); old.material.dispose(); }
+    const canvas=document.createElement('canvas'); canvas.width=1024; canvas.height=1024;
+    const ctx=canvas.getContext('2d');
+    for(let y=0;y<16;y++) for(let x=0;x<16;x++) {
+      ctx.fillStyle=(pattern==='stripes'?x:x+y)%2?'#fff':'#000'; ctx.fillRect(x*64,y*64,64,64);
+    }
+    const texture=new THREE.CanvasTexture(canvas); texture.anisotropy=Math.min(8,scene.renderer?.capabilities.getMaxAnisotropy() || 1);
+    const geometry=new THREE.CylinderGeometry(1,1,6,96,1,true,Math.PI/2,Math.PI);
+    const mesh=new THREE.Mesh(geometry,new THREE.MeshBasicMaterial({map:texture,side:THREE.DoubleSide}));
+    mesh.position.y=2; el.setObject3D('mesh',mesh);
   }
   function rotate(degrees) {
     const room = scene.querySelector('#visual-world');
@@ -59,9 +79,9 @@
     if (preview || !root || !user) return;
     const c = trial.cmd;
     const payload = { ...c, reason, startedAtQuestWallClockMs: trial.startedWallMs,
-      endedAtQuestWallClockMs: Date.now(), anklePivotM: trial.pivot,
+      endedAtQuestWallClockMs: Date.now(), anklePivotM: trial.pivot, calibration: trial.calibration, timeOriginMs: performance.timeOrigin, serverOffsetMs: serverOffset, sampleColumns: ['elapsed_ms','applied_deg','commanded_deg','performance_ms','epoch_estimate_ms'],
       samples: trial.samples,
-      note: 'Approximate modern room, not an exact paper reproduction. Ankle x/z approximate the point below the head. samples=[elapsed_ms,visual_world_rotation_deg]. Quest wall-clock timestamps are not synchronized with external sensors.' };
+      note: 'Applied angle is software transform, not measured photon output. Approximate modern room, not an exact paper reproduction. Ankle x/z approximate the point below the head. samples=[elapsed_ms,visual_world_rotation_deg]. Quest wall-clock timestamps are not synchronized with external sensors.' };
     // Saving a completed log must not block STOP or a new command.
     root.child('logs/' + user.uid + '/' + c.runId).set(payload).catch(error => {
       console.error(error); ack('log-error', { commandSeq: c.seq, lastRunId: c.runId, error: error.message });
@@ -86,39 +106,24 @@
       ack(current && rendered() ? 'ready' : 'connected');
     }
   }
-  function parseCsv(content) {
-    const points = [];
-    for (const line of content.trim().split(/\r?\n/)) {
-      const text = line.trim();
-      if (!text || text.startsWith('#') || /^time/i.test(text)) continue;
-      const cells = text.split(',');
-      if (cells.length !== 2 || cells.some(c => !c.trim())) throw Error('CSV行が不正です');
-      const [time, angle] = cells.map(Number);
-      if (!Number.isFinite(time) || !Number.isFinite(angle) || time < 0 || Math.abs(angle) > 45) throw Error('CSVの値が範囲外です');
-      points.push([time, angle]);
-    }
-    if (points.length < 2) throw Error('CSVには2行以上のデータが必要です');
-    if (points.some((p, i) => i && p[0] <= points[i - 1][0])) throw Error('CSV時刻は昇順・重複なしが必要です');
-    return points;
-  }
-  function interpolate(points, time) {
-    if (time <= points[0][0]) return points[0][1];
-    if (time >= points.at(-1)[0]) return points.at(-1)[1];
-    let a = 0, b = points.length - 1;
-    while (a + 1 < b) { const m = (a + b) >> 1; if (points[m][0] <= time) a = m; else b = m; }
-    return points[a][1] + (time - points[a][0]) / (points[b][0] - points[a][0]) * (points[b][1] - points[a][1]);
-  }
+  const parseCsv = Stimulus.parseCsv;
   function block(error) { show(error); ack('blocked', { error }); }
   async function command(c) {
     if (!c || !Number.isSafeInteger(c.seq)) return;
     // STOP is always safe, including when a stale PC has not received this instance's status yet.
     if (!preview && c.questInstanceId !== instanceId) {
-      if (c.type === 'stop') { finish('stopped'); rotate(0); ack('idle', { commandSeq: c.seq, reason: 'stopped' }); }
+      if (c.type === 'stop' || c.type === 'emergency') { finish('stopped'); rotate(0); ack('idle', { commandSeq: c.seq, reason: 'stopped' }); }
       return;
     }
     if (c.seq <= lastSeq) return;
     lastSeq = c.seq; commandSeq = c.seq;
-    if (c.type === 'stop') {
+    if (c.type === 'return') {
+      cancelPending();
+      if (active && active.startedPerf !== null) { active.returning ||= { at: performance.now(), angle: active.actualAngle || 0 }; ack('returning'); }
+      else { finish('stopped'); ack('idle'); }
+      return;
+    }
+    if (c.type === 'stop' || c.type === 'emergency') {
       finish('stopped'); rotate(0); ack('idle', { reason: 'stopped' }); return;
     }
     if (!preview && (!Number.isFinite(c.requestedAt) ||
@@ -129,6 +134,7 @@
     if (!ready()) { block(rendered() ? 'enter VR before START（immersive-vr未開始）' : '3D描画の初期化が未完了です'); return; }
     if (c.type === 'calibrate') {
       if (active || pending) { block('STOPしてから位置合わせしてください'); return; }
+      if (!Number.isFinite(c.heightCm) || c.heightCm < 100 || c.heightCm > 220) { block('身長が範囲外です'); return; }
       if (!Number.isFinite(c.ankleHeightM) || c.ankleHeightM < 0 || c.ankleHeightM > 0.2) { block('足首の高さが不正です'); return; }
       const head = new THREE.Vector3();
       if (preview) {
@@ -137,20 +143,26 @@
         scene.renderer.xr.getCamera(scene.camera).getWorldPosition(head);
       }
       pivot.set(head.x, c.ankleHeightM, head.z);
+      calibration = { heightCm: c.heightCm || null, measuredEyeHeightM: preview ? null : head.y, estimatedAnkleHeightM: (c.heightCm || 160)/100*.039, manualAnkleHeightM: c.ankleHeightM, referenceSpace: 'local-floor requested; verify floor on device', calibratedAtMs: Date.now() };
       calibrated = true; rotate(0); show('位置合わせ完了（足首の前後・左右は頭の真下で近似）');
-      ack('ready', { anklePivotM: pivot.toArray() }); return;
+      ack('ready', { anklePivotM: pivot.toArray(), calibration }); return;
     }
     if (c.type !== 'start') return;
     if (!calibrated) { block('PCで立ち位置合わせが必要です'); return; }
-    if (!['baseline', 'sine', 'csv'].includes(c.mode) || !Number.isFinite(c.durationSec) || c.durationSec < 5 || c.durationSec > 600 ||
+    if (!['baseline', 'sine', 'csv', 'trapv'].includes(c.mode) || !Number.isFinite(c.durationSec) || c.durationSec < 5 || c.durationSec > 600 ||
       !/^[A-Za-z0-9_-]{1,100}$/.test(c.runId || '') ||
       (c.mode === 'sine' && (!Number.isFinite(c.frequencyHz) || c.frequencyHz <= 0 || c.frequencyHz > 2 ||
         !Number.isFinite(c.amplitudeDeg) || c.amplitudeDeg < 0 || c.amplitudeDeg > 20))) {
       block('刺激設定が不正です'); return;
     }
+    if (active || pending) { block('STOP後に次の条件を開始してください'); return; }
+    if (c.mode === 'trapv') { try { Stimulus.trap(c); } catch(e) { block(e.message); return; } }
+    if (c.mode === 'sine' && 2*Math.PI*c.frequencyHz*c.amplitudeDeg > Stimulus.limits.velocity) { block('角速度上限30°/sを超えます'); return; }
+    if (c.pattern && !['room','checker','stripes'].includes(c.pattern)) { block('映像パターン不正'); return; }
     finish('replaced');
+    selectPattern(c.pattern || 'room');
     const token = generation;
-    const trial = { cmd: { ...c }, samples: [], pivot: pivot.toArray(), points: null,
+    const trial = { cmd: { ...c }, samples: [], pivot: pivot.toArray(), points: null, calibration,
       startedPerf: null, startedWallMs: null, preludePerf: null };
     if (preview) {
       scene.querySelector('a-camera').setAttribute('position', { x: 0, y: c.eyeHeightM || 1.5, z: 0 });
@@ -158,6 +170,8 @@
     }
     if (c.mode === 'csv') {
       if (!/^[A-Za-z0-9_.-]+\.csv$/.test(c.csvFile || '') || c.csvFile.includes('..')) { block('CSVファイル名が不正です'); return; }
+      if (c.csvPoints) { try { trial.points = parseCsv(c.csvPoints.map(p=>p.join(',')).join('\n')); } catch(e) { block(e.message); return; } }
+      else {
       pending = new AbortController(); ack('loading', { runId: c.runId });
       try {
         const response = await fetch('./' + c.csvFile, { cache: 'no-store', signal: pending.signal });
@@ -167,6 +181,7 @@
         if (token === generation) { pending = null; block('CSV読込エラー: ' + error.message); }
         return;
       }
+    }
     }
     if (token !== generation || !ready() || (!preview && !connected)) return;
     pending = null; trial.preludePerf = performance.now(); active = trial; rotate(0);
@@ -183,11 +198,17 @@
         active.startedPerf = now; active.startedWallMs = Date.now();
         show('再生中: ' + active.cmd.mode); ack('running', { commandSeq: active.cmd.seq, runId: active.cmd.runId, startedAtQuestWallClockMs: active.startedWallMs });
       }
+      if (active.returning) {
+        const u=Math.min(1,(now-active.returning.at)/2000);
+        const deg=active.returning.angle*(1-u*u*(3-2*u)); rotate(deg);
+        active.samples.push([(now-active.startedPerf),deg,0,now,performance.timeOrigin+now]);
+        if(u===1) finish('stopped'); return;
+      }
       const t = (now - active.startedPerf) / 1000, c = active.cmd;
       if (t >= c.durationSec) { finish(); return; }
       const degrees = c.mode === 'sine' ? c.amplitudeDeg * Math.sin(2 * Math.PI * c.frequencyHz * t) :
         c.mode === 'csv' ? interpolate(active.points, t) : 0;
-      rotate(degrees); active.samples.push([Math.round(t * 1000), Math.round(degrees * 100000) / 100000]);
+      rotate(degrees); active.samples.push([Math.round(t * 1000), Math.round(degrees * 100000) / 100000, commanded, now, performance.timeOrigin + now]);
     }
   });
   if (preview) {
@@ -227,7 +248,7 @@
   }).catch(error => { xrSupport = error.message; updateDiagnostics(); });
   // Poll state even when XR events or a paused render loop arrive in another order.
   setInterval(() => { syncXR(); updateDiagnostics(); }, 250);
-  setInterval(() => ack(active ? (active.startedPerf === null ? 'countdown' : 'running') : pending ? 'loading' : ready() ? 'ready' : 'connected',
+  setInterval(() => ack(active ? (active.returning ? 'returning' : active.startedPerf === null ? 'countdown' : 'running') : pending ? 'loading' : ready() ? 'ready' : 'connected',
     active ? { commandSeq: active.cmd.seq, runId: active.cmd.runId } : {}), 5000);
   async function loadScript(src) {
     await new Promise((resolve, reject) => {
