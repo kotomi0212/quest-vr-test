@@ -9,12 +9,13 @@
   }
   patternSelect.value=StimulusPatterns.defaultPattern;
   function describePattern() {
-    const definition=StimulusPatterns.get(patternSelect.value), screen=StimulusPatterns.screen;
+    const definition=StimulusPatterns.get(patternSelect.value), plane=layoutConfig.plane;
     $('patternDescription').textContent=definition.kind === 'legacy' ?
-      (patternSelect.value === 'room' ? '既存の家具のある部屋です。3種類の平面パターン比較とは画面形状が異なります。' : '既存の半円筒：半径1 m・高さ6 m・正面180°、約10 cm間隔の縦横線。') :
-      `平面：正面${screen.distanceM} m・幅${screen.widthM} m×高さ${screen.heightM} m・中心高さ${screen.centerHeightM} m。` +
-      (definition.kind === 'noise' ? '静止1/f振幅ノイズ（パワー1/f²）、シード固定。' : `縦縞：1周期${StimulusPatterns.stripePeriodM*100} cm・コントラスト${definition.michelsonContrast*100}%。`) +
-      '足首中心の運動は全パターン共通。';
+      (patternSelect.value === 'room' ? '既存の部屋：quest.htmlの #room-pattern。' : '既存の半円筒：layout-config.jsのcylinder。') :
+      `表示面：幅${plane.widthM} m×高さ${plane.heightM} m、中心(${plane.positionM.x}, ${plane.positionM.y}, ${plane.positionM.z}) m。` +
+      `画像：${definition.width}×${definition.height} px、brightness=${definition.brightness}、contrast=${definition.contrast}。` +
+      (definition.kind === 'noise' ? `振幅指数${definition.spectralSlope}、seed=${definition.seed}。` : `縞の向き${definition.orientation}°、明暗${definition.stripeCount}組。`) +
+      '画像設定: pattern-config.js / 配置: layout-config.js / 回転: motion-config.js';
   }
   describePattern();
   const config = window.VR_REMOTE_CONFIG;
@@ -77,7 +78,7 @@
       if (subscribed) root.child('status').off('value', receive);
       subscribed = false; quest = null; previewReady = false; $('preview').removeAttribute('src'); return;
     }
-    if (!$('preview').getAttribute('src')) $('preview').src = 'quest.html?preview=1&v=20261020-patterns1';
+    if (!$('preview').getAttribute('src')) $('preview').src = 'quest.html?preview=1&v=20261020-layout2';
     if (!subscribed) { subscribed = true; root.child('status').on('value', receive, error => tell('Quest状態の購読エラー: ' + error.message)); }
   });
   setInterval(() => {

@@ -13,9 +13,25 @@
   let calibration = null;
   let calibrated = preview, wasImmersive = false, graphicsLost = false, observedSession = null;
   let xrSupport = '確認中', firebaseState = preview ? 'プレビュー（接続なし）' : '準備中';
-  const pivot = new THREE.Vector3(0, 0.088, 0);
+  const pivot = new THREE.Vector3(0, 0.088, 0); // 校正原点。motionConfigの固定中心とは独立。
   const patternTextures = new Map();
   let selectedPattern = 'room';
+  // 配置の原点と運動の回転中心は別。pivotは既存のキャリブレーション結果。
+  const axisLength=Math.hypot(motionConfig.rotationAxis.x,motionConfig.rotationAxis.y,motionConfig.rotationAxis.z);
+  if (!Number.isFinite(axisLength) || !axisLength) throw Error('motionConfig.rotationAxisが不正です');
+  const motionAxis=new THREE.Vector3(motionConfig.rotationAxis.x/axisLength,motionConfig.rotationAxis.y/axisLength,motionConfig.rotationAxis.z/axisLength);
+  function rotationPivot() {
+    if (!['calibrated','fixed'].includes(motionConfig.pivot.mode)) throw Error('motionConfig.pivot.modeが不正です');
+    const base=motionConfig.pivot.mode === 'fixed' ? motionConfig.pivot.positionM : pivot;
+    const offset=motionConfig.pivot.offsetM;
+    const values=[base.x+offset.x,base.y+offset.y,base.z+offset.z];
+    if (!values.every(Number.isFinite)) throw Error('回転中心が不正です');
+    return new THREE.Vector3(...values);
+  }
+  function layoutSettings() {
+    return { ...JSON.parse(JSON.stringify(layoutConfig)), anchorOriginM: layoutConfig.anchor === 'calibrated-xz' ? {x:pivot.x,y:0,z:pivot.z} : {x:0,y:0,z:0} };
+  }
+  function motionSettings() { return { ...JSON.parse(JSON.stringify(motionConfig)), resolvedPivotM:rotationPivot().toArray(), normalizedAxis:motionAxis.toArray() }; }
   function patternSettings() {
     return patternTextures.get(selectedPattern)?.metadata || StimulusPatterns.metadata(selectedPattern);
   }
@@ -31,7 +47,7 @@
       xrPresenting: !!scene.renderer?.xr.isPresenting,
       xrSessionActive: !!scene.renderer?.xr.getSession(),
       aframeVR: scene.is('vr-mode'), client: navigator.userAgent || 'unknown',
-      pattern: selectedPattern, patternSettings: patternSettings(),
+      pattern: selectedPattern, patternSettings: patternSettings(), layoutSettings:layoutSettings(), motionSettings:motionSettings(),
       appliedAngleDeg: active?.actualAngle || 0, startupError: window.vrLastError || '' };
   }
   function updateDiagnostics() {
@@ -59,7 +75,8 @@
     scene.querySelector('#contrast-surround').object3D.visible = pattern !== 'room';
     const el = scene.querySelector('#contrast-pattern');
     el.object3D.visible = pattern !== 'room';
-    el.object3D.position.set(pivot.x, 0, pivot.z);
+    if (!['calibrated-xz','world'].includes(layoutConfig.anchor)) throw Error('layoutConfig.anchorが不正です');
+    el.object3D.position.set(layoutConfig.anchor === 'calibrated-xz' ? pivot.x : 0, 0, layoutConfig.anchor === 'calibrated-xz' ? pivot.z : 0);
     if (pattern === 'room' || el.dataset.pattern === pattern) return;
     el.dataset.pattern = pattern;
     const old = el.getObject3D('mesh');
@@ -67,12 +84,12 @@
     const plane = definition.kind !== 'legacy';
     if (!patternTextures.has(pattern)) {
       const canvas=document.createElement('canvas');
-      canvas.width=plane ? StimulusPatterns.textureSize : 1024;
-      canvas.height=plane ? StimulusPatterns.textureSize : 2048;
+      canvas.width=plane ? definition.width : 1024;
+      canvas.height=plane ? definition.height : 2048;
       const ctx=canvas.getContext('2d');
       let statistics;
       if (plane) {
-        const result=StimulusPatterns.pixels(pattern, StimulusPatterns.screen, StimulusPatterns.stripePeriodM);
+        const result=StimulusPatterns.generate(pattern);
         const image=ctx.createImageData(canvas.width,canvas.height); image.data.set(result.rgba); ctx.putImageData(image,0,0);
         statistics=result.statistics;
       } else Stimulus.drawGrid(ctx, canvas.width, canvas.height);
@@ -81,18 +98,23 @@
       texture.anisotropy=Math.min(8,scene.renderer?.capabilities.getMaxAnisotropy() || 1);
       patternTextures.set(pattern,{texture,metadata:StimulusPatterns.metadata(pattern,statistics)});
     }
-    const screen=StimulusPatterns.screen;
-    const geometry=plane ? new THREE.PlaneGeometry(screen.widthM,screen.heightM) : new THREE.CylinderGeometry(1,1,6,96,1,true,Math.PI/2,Math.PI);
+    const surface=plane ? layoutConfig.plane : layoutConfig.cylinder;
+    if (!(plane ? [surface.widthM,surface.heightM] : [surface.radiusM,surface.heightM]).every(n=>Number.isFinite(n)&&n>0) ||
+      ![...Object.values(surface.positionM),...Object.values(surface.rotationDeg)].every(Number.isFinite)) throw Error('表示面の配置設定が不正です');
+    const geometry=plane ? new THREE.PlaneGeometry(surface.widthM,surface.heightM) : new THREE.CylinderGeometry(surface.radiusM,surface.radiusM,surface.heightM,surface.radialSegments,1,true,THREE.MathUtils.degToRad(surface.thetaStartDeg),THREE.MathUtils.degToRad(surface.thetaLengthDeg));
     const mesh=new THREE.Mesh(geometry,new THREE.MeshBasicMaterial({map:patternTextures.get(pattern).texture,side:THREE.DoubleSide,...(plane ? {toneMapped:false} : {})}));
-    mesh.position.set(0,plane ? screen.centerHeightM : 2,plane ? -screen.distanceM : 0);
+    mesh.position.set(surface.positionM.x,surface.positionM.y,surface.positionM.z);
+    mesh.rotation.set(THREE.MathUtils.degToRad(surface.rotationDeg.x),THREE.MathUtils.degToRad(surface.rotationDeg.y),THREE.MathUtils.degToRad(surface.rotationDeg.z));
     el.setObject3D('mesh',mesh);
   }
   function rotate(degrees) {
     const room = scene.querySelector('#visual-world');
     if (!room?.object3D) return;
-    room.object3D.rotation.x = THREE.MathUtils.degToRad(degrees);
-    const rotated = pivot.clone().applyAxisAngle(new THREE.Vector3(1, 0, 0), room.object3D.rotation.x);
-    room.object3D.position.copy(pivot).sub(rotated);
+    // 将来の回転適用を変更する入口。配置の初期姿勢とは別に親全体を動かす。
+    const angle=THREE.MathUtils.degToRad(degrees), center=rotationPivot();
+    room.object3D.setRotationFromAxisAngle(motionAxis,angle);
+    const rotated=center.clone().applyAxisAngle(motionAxis,angle);
+    room.object3D.position.copy(center).sub(rotated);
   }
   function cancelPending() {
     generation++;
@@ -108,7 +130,7 @@
     if (preview || !root || !user) return;
     const c = trial.cmd;
     const payload = { ...c, reason, startedAtQuestWallClockMs: trial.startedWallMs,
-      endedAtQuestWallClockMs: Date.now(), anklePivotM: trial.pivot, calibration: trial.calibration, patternSettings: trial.patternSettings, timeOriginMs: performance.timeOrigin, serverOffsetMs: serverOffset, sampleColumns: ['elapsed_ms','applied_deg','commanded_deg','performance_ms','epoch_estimate_ms'],
+      endedAtQuestWallClockMs: Date.now(), anklePivotM: trial.pivot, calibration: trial.calibration, patternSettings: trial.patternSettings, layoutSettings:trial.layoutSettings, motionSettings:trial.motionSettings, timeOriginMs: performance.timeOrigin, serverOffsetMs: serverOffset, sampleColumns: ['elapsed_ms','applied_deg','commanded_deg','performance_ms','epoch_estimate_ms'],
       samples: trial.samples,
       note: 'Applied angle is software transform, not measured photon output. Approximate modern room, not an exact paper reproduction. Ankle x/z approximate the point below the head. samples=[elapsed_ms,visual_world_rotation_deg]. Quest wall-clock timestamps are not synchronized with external sensors.' };
     // Saving a completed log must not block STOP or a new command.
@@ -199,7 +221,7 @@
     finish('replaced');
     selectPattern(c.pattern || 'room');
     const token = generation;
-    const trial = { cmd: { ...c, pattern:selectedPattern }, patternSettings:patternSettings(), samples: [], pivot: pivot.toArray(), points: null, calibration,
+    const trial = { cmd: { ...c, pattern:selectedPattern }, patternSettings:patternSettings(), layoutSettings:layoutSettings(), motionSettings:motionSettings(), samples: [], pivot: pivot.toArray(), points: null, calibration,
       startedPerf: null, startedWallMs: null, preludePerf: null };
     if (preview) {
       scene.querySelector('a-camera').setAttribute('position', { x: 0, y: c.eyeHeightM || 1.5, z: 0 });

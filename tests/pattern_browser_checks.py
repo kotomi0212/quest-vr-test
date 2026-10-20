@@ -4,6 +4,7 @@ Run: python3 tests/pattern_browser_checks.py
 AFRAME_BUNDLE_PATH may point to an official, TLS-verified A-Frame 1.7.0 bundle.
 """
 import unittest
+import json
 
 import browser_checks
 
@@ -83,7 +84,7 @@ class PatternBrowserChecks(browser_checks.BrowserChecks):
             log = self.page.evaluate('''id=>fixture.writes.find(w=>w.path.endsWith('/'+id)).value''', start['runId'])
             self.assertEqual(log['pattern'], pattern)
             self.assertEqual(log['patternSettings']['id'], pattern)
-            self.assertEqual(log['patternSettings']['screen']['distanceM'], 3)
+            self.assertEqual(-log['layoutSettings']['plane']['positionM']['z'], 3)
             self.assertGreater(len(log['samples']), 100)
             self.assertTrue(self.status()['immersive'])
         self.assertEqual(trajectories[0], trajectories[1])
@@ -112,7 +113,7 @@ class PatternBrowserChecks(browser_checks.BrowserChecks):
         self.page.locator('#pattern').select_option('stripes-low')
         preview.wait_for_function("document.querySelector('#contrast-pattern').dataset.pattern==='stripes-low'")
         self.assertEqual(preview.locator('canvas.a-canvas').bounding_box()['height'], 340)
-        self.assertIn('コントラスト10%', self.page.locator('#patternDescription').inner_text())
+        self.assertIn('contrast=0.1', self.page.locator('#patternDescription').inner_text())
         self.assertEqual(preview.evaluate('typeof firebase'), 'undefined')
         self.assertEqual(self.page.evaluate('fixture.anonymousCalls'), 0)
         self.page.evaluate('''()=>fixture.emit(Array.from(fixture.listeners.keys()).find(p=>p.endsWith('/status')),
@@ -122,6 +123,49 @@ class PatternBrowserChecks(browser_checks.BrowserChecks):
         self.page.locator('#pattern').select_option('stripes-high')
         self.page.wait_for_function("fixture.writes.some(w=>w.value.type==='configure'&&w.value.pattern==='stripes-high')")
         preview.wait_for_function("document.querySelector('#contrast-pattern').dataset.pattern==='stripes-high'")
+        self.assertEqual(self.errors, [])
+
+
+    def test_pattern_config_layout_changes_without_regenerating_image_content(self):
+        self.quest()
+        self.command('configure', pattern='noise-1f')
+        original = self.page.evaluate("document.querySelector('#contrast-pattern').getObject3D('mesh').material.map.image.toDataURL()")
+        layout = self.page.evaluate('JSON.parse(JSON.stringify(layoutConfig))')
+        layout['plane'].update(widthM=8, heightM=2, positionM={'x':1,'y':2,'z':-5}, rotationDeg={'x':0,'y':30,'z':0})
+        self.page.route('**/layout-config.js*', lambda route: route.fulfill(body='globalThis.layoutConfig='+json.dumps(layout), content_type='application/javascript'))
+        self.quest()
+        self.command('configure', pattern='noise-1f')
+        state=self.pattern_state()
+        self.assertEqual([state['width'],state['height']],[8,2])
+        self.assertEqual(state['position'],[1,2,-5])
+        self.assertAlmostEqual(self.page.evaluate("document.querySelector('#contrast-pattern').getObject3D('mesh').rotation.y"), 3.141592653589793/6)
+        self.assertEqual(original,self.page.evaluate("document.querySelector('#contrast-pattern').getObject3D('mesh').material.map.image.toDataURL()"))
+        self.assertEqual(self.errors, [])
+
+    def test_pattern_config_fixed_pivot_and_y_axis(self):
+        motion={'rotationAxis':{'x':0,'y':1,'z':0}, 'pivot':{'mode':'fixed','positionM':{'x':1,'y':1,'z':2},'offsetM':{'x':0,'y':.1,'z':0}}}
+        self.page.route('**/motion-config.js*', lambda route: route.fulfill(body='globalThis.motionConfig='+json.dumps(motion), content_type='application/javascript'))
+        self.quest(); self.calibrated()
+        self.page.evaluate("""() => {
+          const s=document.querySelector('a-scene');s.renderer.setAnimationLoop(null);s.pause();
+          fixture.now=performance.now();Object.defineProperty(performance,'now',{value:()=>fixture.now});
+          fixture.advance=ms=>{fixture.now+=ms;s.components['stimulus-driver'].tick();};
+        }""")
+        start=self.command('start',pattern='stripes-low')
+        self.page.evaluate('fixture.advance(3001)')
+        result=self.page.evaluate("""()=>{
+          for(let i=0;i<100;i++)fixture.advance(10);
+          const room=document.querySelector('#visual-world').object3D;room.updateMatrixWorld(true);
+          const p=new AFRAME.THREE.Vector3(1,1.1,2);
+          return {error:p.clone().applyMatrix4(room.matrixWorld).distanceTo(p),x:room.rotation.x,y:room.rotation.y};
+        }""")
+        self.assertLess(result['error'],1e-10)
+        self.assertAlmostEqual(result['x'],0)
+        self.assertGreater(abs(result['y']),.01)
+        self.command('emergency')
+        log=self.page.evaluate("id=>fixture.writes.find(w=>w.path.endsWith('/'+id)).value",start['runId'])
+        self.assertEqual(log['motionSettings']['resolvedPivotM'],[1,1.1,2])
+        self.assertEqual(log['motionSettings']['normalizedAxis'],[0,1,0])
         self.assertEqual(self.errors, [])
 
 

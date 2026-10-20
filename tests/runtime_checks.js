@@ -4,6 +4,7 @@
 const assert=require('node:assert/strict'), vm=require('node:vm'), fs=require('node:fs');
 const S=require('../stimulus-engine.js');
 const P=require('../stimulus-patterns.js');
+const L=require('../layout-config.js'),M=require('../motion-config.js');
 let now=0, tick, seq=0;
 class Vector3 {
   constructor(x=0,y=0,z=0){this.set(x,y,z);}
@@ -14,7 +15,7 @@ class Vector3 {
   applyAxisAngle(axis,a){const y=this.y*Math.cos(a)-this.z*Math.sin(a),z=this.y*Math.sin(a)+this.z*Math.cos(a);this.y=y;this.z=z;return this;}
   toArray(){return [this.x,this.y,this.z];}
 }
-function element(){return {object3D:{position:new Vector3(),rotation:{x:0},visible:true},dataset:{},style:{},setAttribute(){},addEventListener(){},setObject3D(k,v){this[k]=v;},getObject3D(k){return this[k];}};}
+function element(){return {object3D:{position:new Vector3(),rotation:{x:0,y:0,z:0,set(x,y,z){Object.assign(this,{x,y,z});}},setRotationFromAxisAngle(axis,a){this.rotation.set(axis.x*a,axis.y*a,axis.z*a);},visible:true},dataset:{},style:{},setAttribute(){},addEventListener(){},setObject3D(k,v){this[k]=v;},getObject3D(k){return this[k];}};}
 const world=element(), room=element(), contrast=element(), surround=element(), camera=element();
 const elements={'#visual-world':world,'#room-pattern':room,'#contrast-pattern':contrast,'#contrast-surround':surround,'a-camera':camera};
 const scene={...element(),renderStarted:true,hasLoaded:true,camera:{},renderer:{xr:{isPresenting:false,getSession:()=>null},capabilities:{getMaxAnisotropy:()=>8}},is:()=>false,querySelector:s=>elements[s] || null};
@@ -29,10 +30,10 @@ const THREE={Vector3,MathUtils:{degToRad:a=>a*Math.PI/180},DoubleSide:2,
   CylinderGeometry:class {constructor(...args){this.args=args;}dispose(){}},
   PlaneGeometry:class {constructor(...args){this.args=args;}dispose(){}},
   MeshBasicMaterial:class {constructor(options){Object.assign(this,options);}dispose(){}},
-  Mesh:class {constructor(geometry,material){Object.assign(this,{geometry,material,position:new Vector3()});}}};
+  Mesh:class {constructor(geometry,material){Object.assign(this,{geometry,material,position:new Vector3(),rotation:{set(){}}});}}};
 const parent={postMessage(){}};
 const window={addEventListener:(name,fn)=>{events[name]=fn;},vrLastError:''};
-const sandbox={window,document,AFRAME:{THREE,registerComponent:(name,c)=>{tick=c.tick;}},Stimulus:S,StimulusPatterns:P,crypto:require('node:crypto').webcrypto,
+const sandbox={window,document,AFRAME:{THREE,registerComponent:(name,c)=>{tick=c.tick;}},Stimulus:S,StimulusPatterns:P,layoutConfig:L,motionConfig:M,crypto:require('node:crypto').webcrypto,
   URLSearchParams,location:{search:'?preview=1',origin:'http://test'},parent,isSecureContext:false,navigator:{},
   performance:{now:()=>now,timeOrigin:100000},Date,console,setTimeout:()=>1,clearTimeout(){},setInterval(){},reportStartupError:e=>{throw Error(e);}};
 window.AFRAME=sandbox.AFRAME;
@@ -64,8 +65,8 @@ async function flush(){await Promise.resolve();await Promise.resolve();}
  for(const pattern of ['noise-1f','stripes-high','stripes-low']) {
   command('configure',{pattern});await flush();
   assert.equal(contrast.mesh.geometry.constructor,THREE.PlaneGeometry);
-  assert.deepEqual(contrast.mesh.geometry.args,[P.screen.widthM,P.screen.heightM]);
-  assert.deepEqual(contrast.mesh.position.toArray(),[0,P.screen.centerHeightM,-P.screen.distanceM]);
+  assert.deepEqual(contrast.mesh.geometry.args,[L.plane.widthM,L.plane.heightM]);
+  assert.deepEqual(contrast.mesh.position.toArray(),[L.plane.positionM.x,L.plane.positionM.y,L.plane.positionM.z]);
   assert.equal(contrast.mesh.material.toneMapped,false);
   assert.equal(contrast.mesh.material.map.colorSpace,THREE.SRGBColorSpace);
   textures.push(contrast.mesh.material.map);
@@ -102,7 +103,7 @@ async function flush(){await Promise.resolve();await Promise.resolve();}
  const log=fixture.writes.find(w=>w.path.endsWith('/logs/test-quest/test-pattern-log'))?.value;
  assert(log,'Pattern trial must produce a log');assert.equal(log.pattern,'noise-1f');
  assert.equal(log.patternSettings.seed,P.get('noise-1f').seed);
- assert.deepEqual(JSON.parse(JSON.stringify(log.patternSettings.screen)),P.screen);
+ assert.deepEqual(JSON.parse(JSON.stringify(log.layoutSettings.plane)),L.plane);
  assert(log.samples.length>0);
  console.log('PASS: production Quest ticks move TrapV/sin/legacy CSV, smooth STOP, emergency STOP, grid mesh/white surround, idle scene switching');
 })().catch(e=>{console.error(e);process.exitCode=1;});

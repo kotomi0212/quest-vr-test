@@ -11,7 +11,7 @@ function ref(p){return {child:n=>ref(p+'/'+n),on:(e,cb)=>{listeners[p]=cb;if(p==
 const auth={onAuthStateChanged:cb=>cb({uid:'operator',isAnonymous:false})};
 const database=()=>({ref});database.ServerValue={TIMESTAMP:{'.sv':'timestamp'}};
 const firebase={initializeApp(){},auth:()=>auth,database};
-const context={window:{firebase,VR_REMOTE_CONFIG:{firebase:{},sessionId:'test'},addEventListener(){}},firebase,document:{getElementById:id=>nodes[id],createElement:()=>({})},Stimulus:require('../stimulus-engine.js'),StimulusPatterns:require('../stimulus-patterns.js'),crypto:require('node:crypto').webcrypto,Date,Number,location:{origin:'http://test'},setInterval(){}};
+const context={window:{firebase,VR_REMOTE_CONFIG:{firebase:{},sessionId:'test'},addEventListener(){}},firebase,document:{getElementById:id=>nodes[id],createElement:()=>({})},Stimulus:require('../stimulus-engine.js'),StimulusPatterns:require('../stimulus-patterns.js'),layoutConfig:require('../layout-config.js'),motionConfig:require('../motion-config.js'),crypto:require('node:crypto').webcrypto,Date,Number,location:{origin:'http://test'},setInterval(){}};
 vm.runInNewContext(source,context);
 listeners['sessions/test/status']({val:()=>({instanceId:'quest',at:Date.now(),firebaseState:'接続済み',immersive:true,renderStarted:true,calibrated:true})});
 (async()=>{
