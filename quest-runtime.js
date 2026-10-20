@@ -14,6 +14,11 @@
   let calibrated = preview, wasImmersive = false, graphicsLost = false, observedSession = null;
   let xrSupport = '確認中', firebaseState = preview ? 'プレビュー（接続なし）' : '準備中';
   const pivot = new THREE.Vector3(0, 0.088, 0);
+  const patternTextures = new Map();
+  let selectedPattern = 'room';
+  function patternSettings() {
+    return patternTextures.get(selectedPattern)?.metadata || StimulusPatterns.metadata(selectedPattern);
+  }
   const show = message => { document.querySelector('#status').textContent = message; };
   const immersive = () => !!(scene.renderer?.xr.isPresenting &&
     scene.renderer.xr.getSession() && !scene.is('ar-mode'));
@@ -26,6 +31,7 @@
       xrPresenting: !!scene.renderer?.xr.isPresenting,
       xrSessionActive: !!scene.renderer?.xr.getSession(),
       aframeVR: scene.is('vr-mode'), client: navigator.userAgent || 'unknown',
+      pattern: selectedPattern, patternSettings: patternSettings(),
       appliedAngleDeg: active?.actualAngle || 0, startupError: window.vrLastError || '' };
   }
   function updateDiagnostics() {
@@ -43,10 +49,12 @@
       firebaseState = '状態送信失敗'; updateDiagnostics(); console.error(error);
     });
   }
-  // One static mipmapped texture and one mesh; no per-frame texture regeneration.
+  // One visible mesh. Textures are generated once per pattern and reused, never per frame.
   function selectPattern(pattern) {
-    // Old clients used checker/stripes; both now resolve to the requested grid.
-    pattern = pattern === 'room' ? 'room' : 'grid';
+    const definition = StimulusPatterns.get(pattern);
+    if (!definition) throw Error('映像パターン不正');
+    pattern = StimulusPatterns.resolve(pattern);
+    selectedPattern = pattern;
     scene.querySelector('#room-pattern').object3D.visible = pattern === 'room';
     scene.querySelector('#contrast-surround').object3D.visible = pattern !== 'room';
     const el = scene.querySelector('#contrast-pattern');
@@ -55,14 +63,29 @@
     if (pattern === 'room' || el.dataset.pattern === pattern) return;
     el.dataset.pattern = pattern;
     const old = el.getObject3D('mesh');
-    if(old) { old.geometry.dispose(); old.material.map.dispose(); old.material.dispose(); }
-    const canvas=document.createElement('canvas'); canvas.width=1024; canvas.height=2048;
-    const ctx=canvas.getContext('2d');
-    Stimulus.drawGrid(ctx, canvas.width, canvas.height);
-    const texture=new THREE.CanvasTexture(canvas); texture.anisotropy=Math.min(8,scene.renderer?.capabilities.getMaxAnisotropy() || 1);
-    const geometry=new THREE.CylinderGeometry(1,1,6,96,1,true,Math.PI/2,Math.PI);
-    const mesh=new THREE.Mesh(geometry,new THREE.MeshBasicMaterial({map:texture,side:THREE.DoubleSide}));
-    mesh.position.y=2; el.setObject3D('mesh',mesh);
+    if(old) { old.geometry.dispose(); old.material.dispose(); }
+    const plane = definition.kind !== 'legacy';
+    if (!patternTextures.has(pattern)) {
+      const canvas=document.createElement('canvas');
+      canvas.width=plane ? StimulusPatterns.textureSize : 1024;
+      canvas.height=plane ? StimulusPatterns.textureSize : 2048;
+      const ctx=canvas.getContext('2d');
+      let statistics;
+      if (plane) {
+        const result=StimulusPatterns.pixels(pattern, StimulusPatterns.screen, StimulusPatterns.stripePeriodM);
+        const image=ctx.createImageData(canvas.width,canvas.height); image.data.set(result.rgba); ctx.putImageData(image,0,0);
+        statistics=result.statistics;
+      } else Stimulus.drawGrid(ctx, canvas.width, canvas.height);
+      const texture=new THREE.CanvasTexture(canvas);
+      if (plane) texture.colorSpace=THREE.SRGBColorSpace;
+      texture.anisotropy=Math.min(8,scene.renderer?.capabilities.getMaxAnisotropy() || 1);
+      patternTextures.set(pattern,{texture,metadata:StimulusPatterns.metadata(pattern,statistics)});
+    }
+    const screen=StimulusPatterns.screen;
+    const geometry=plane ? new THREE.PlaneGeometry(screen.widthM,screen.heightM) : new THREE.CylinderGeometry(1,1,6,96,1,true,Math.PI/2,Math.PI);
+    const mesh=new THREE.Mesh(geometry,new THREE.MeshBasicMaterial({map:patternTextures.get(pattern).texture,side:THREE.DoubleSide,...(plane ? {toneMapped:false} : {})}));
+    mesh.position.set(0,plane ? screen.centerHeightM : 2,plane ? -screen.distanceM : 0);
+    el.setObject3D('mesh',mesh);
   }
   function rotate(degrees) {
     const room = scene.querySelector('#visual-world');
@@ -85,7 +108,7 @@
     if (preview || !root || !user) return;
     const c = trial.cmd;
     const payload = { ...c, reason, startedAtQuestWallClockMs: trial.startedWallMs,
-      endedAtQuestWallClockMs: Date.now(), anklePivotM: trial.pivot, calibration: trial.calibration, timeOriginMs: performance.timeOrigin, serverOffsetMs: serverOffset, sampleColumns: ['elapsed_ms','applied_deg','commanded_deg','performance_ms','epoch_estimate_ms'],
+      endedAtQuestWallClockMs: Date.now(), anklePivotM: trial.pivot, calibration: trial.calibration, patternSettings: trial.patternSettings, timeOriginMs: performance.timeOrigin, serverOffsetMs: serverOffset, sampleColumns: ['elapsed_ms','applied_deg','commanded_deg','performance_ms','epoch_estimate_ms'],
       samples: trial.samples,
       note: 'Applied angle is software transform, not measured photon output. Approximate modern room, not an exact paper reproduction. Ankle x/z approximate the point below the head. samples=[elapsed_ms,visual_world_rotation_deg]. Quest wall-clock timestamps are not synchronized with external sensors.' };
     // Saving a completed log must not block STOP or a new command.
@@ -140,14 +163,15 @@
     if (c.type === 'configure') {
       if (!rendered()) { block('3D描画の初期化が未完了です'); return; }
       if (active || pending) { block('映像変更はSTOP後に行ってください'); return; }
-      if (!['room','grid','checker','stripes'].includes(c.pattern)) { block('映像パターン不正'); return; }
-      selectPattern(c.pattern); ack(ready() ? 'ready' : 'connected', { pattern: c.pattern, configured: true }); return;
+      if (!StimulusPatterns.get(c.pattern)) { block('映像パターン不正'); return; }
+      selectPattern(c.pattern); ack(ready() ? 'ready' : 'connected', { configured: true }); return;
     }
     if (!ready()) { block(rendered() ? 'enter VR before START（immersive-vr未開始）' : '3D描画の初期化が未完了です'); return; }
     if (c.type === 'calibrate') {
       if (active || pending) { block('STOPしてから位置合わせしてください'); return; }
       if (!Number.isFinite(c.heightCm) || c.heightCm < 100 || c.heightCm > 220) { block('身長が範囲外です'); return; }
       if (!Number.isFinite(c.ankleHeightM) || c.ankleHeightM < 0 || c.ankleHeightM > 0.2) { block('足首の高さが不正です'); return; }
+      if (c.pattern && !StimulusPatterns.get(c.pattern)) { block('映像パターン不正'); return; }
       const head = new THREE.Vector3();
       if (preview) {
         scene.querySelector('a-camera').setAttribute('position', { x: 0, y: c.eyeHeightM || 1.5, z: 0 });
@@ -171,11 +195,11 @@
     if (active || pending) { block('STOP後に次の条件を開始してください'); return; }
     if (c.mode === 'trapv') { try { Stimulus.trap(c); } catch(e) { block(e.message); return; } }
     if (c.mode === 'sine' && 2*Math.PI*c.frequencyHz*c.amplitudeDeg > Stimulus.limits.velocity) { block('角速度上限30°/sを超えます'); return; }
-    if (c.pattern && !['room','grid','checker','stripes'].includes(c.pattern)) { block('映像パターン不正'); return; }
+    if (c.pattern && !StimulusPatterns.get(c.pattern)) { block('映像パターン不正'); return; }
     finish('replaced');
     selectPattern(c.pattern || 'room');
     const token = generation;
-    const trial = { cmd: { ...c }, samples: [], pivot: pivot.toArray(), points: null, calibration,
+    const trial = { cmd: { ...c, pattern:selectedPattern }, patternSettings:patternSettings(), samples: [], pivot: pivot.toArray(), points: null, calibration,
       startedPerf: null, startedWallMs: null, preludePerf: null };
     if (preview) {
       scene.querySelector('a-camera').setAttribute('position', { x: 0, y: c.eyeHeightM || 1.5, z: 0 });
@@ -232,6 +256,7 @@
     document.querySelector('#info').style.display = 'none';
     scene.setAttribute('xr-mode-ui', 'enabled: false');
     scene.setAttribute('embedded', '');
+    scene.style.width='100vw'; scene.style.height='100vh';
     window.addEventListener('message', event => {
       if (event.source !== parent || event.origin !== location.origin || event.data?.type !== 'stimulus-command') return;
       void command(event.data.command).catch(error => reportStartupError(error.message));

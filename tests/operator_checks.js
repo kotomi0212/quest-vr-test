@@ -3,7 +3,7 @@ const assert=require('node:assert/strict'),vm=require('node:vm'),fs=require('nod
 const html=fs.readFileSync(path.join(__dirname,'../operator.html'),'utf8');
 const source=fs.readFileSync(path.join(__dirname,'../operator.js'),'utf8');
 const nodes={};
-for(const m of html.matchAll(/id="([^"]+)"/g))nodes[m[1]]={value:'',textContent:'',style:{},addEventListener(){},getAttribute(){return null;},setAttribute(){},removeAttribute(){},getContext(){return {clearRect(){},beginPath(){},lineTo(){},moveTo(){},stroke(){}};}};
+for(const m of html.matchAll(/id="([^"]+)"/g))nodes[m[1]]={value:'',textContent:'',style:{},children:[],appendChild(n){this.children.push(n);},addEventListener(){},getAttribute(){return null;},setAttribute(){},removeAttribute(){},getContext(){return {clearRect(){},beginPath(){},lineTo(){},moveTo(){},stroke(){}};}};
 for(const m of source.matchAll(/\$\('([^']+)'\)/g))assert(nodes[m[1]],'Missing operator element '+m[1]);
 Object.entries({mode:'trapv',pattern:'grid',amp:'5',freq:'.2',velocity:'2',ramp:'.5',hold:'1',duration:'10',heightCm:'160',eyeCm:'150',ankleCm:'8.8'}).forEach(([id,v])=>nodes[id].value=v);
 const writes=[],listeners={};
@@ -11,7 +11,7 @@ function ref(p){return {child:n=>ref(p+'/'+n),on:(e,cb)=>{listeners[p]=cb;if(p==
 const auth={onAuthStateChanged:cb=>cb({uid:'operator',isAnonymous:false})};
 const database=()=>({ref});database.ServerValue={TIMESTAMP:{'.sv':'timestamp'}};
 const firebase={initializeApp(){},auth:()=>auth,database};
-const context={window:{firebase,VR_REMOTE_CONFIG:{firebase:{},sessionId:'test'},addEventListener(){}},firebase,document:{getElementById:id=>nodes[id]},Stimulus:require('../stimulus-engine.js'),crypto:require('node:crypto').webcrypto,Date,Number,location:{origin:'http://test'},setInterval(){}};
+const context={window:{firebase,VR_REMOTE_CONFIG:{firebase:{},sessionId:'test'},addEventListener(){}},firebase,document:{getElementById:id=>nodes[id],createElement:()=>({})},Stimulus:require('../stimulus-engine.js'),StimulusPatterns:require('../stimulus-patterns.js'),crypto:require('node:crypto').webcrypto,Date,Number,location:{origin:'http://test'},setInterval(){}};
 vm.runInNewContext(source,context);
 listeners['sessions/test/status']({val:()=>({instanceId:'quest',at:Date.now(),firebaseState:'接続済み',immersive:true,renderStarted:true,calibrated:true})});
 (async()=>{
@@ -21,6 +21,14 @@ listeners['sessions/test/status']({val:()=>({instanceId:'quest',at:Date.now(),fi
  await nodes.stop.onclick();assert.equal(writes.at(-1).type,'return');
  await nodes.emergency.onclick();assert.equal(writes.at(-1).type,'emergency');
  nodes.pattern.value='room';await nodes.pattern.onchange();assert.equal(writes.at(-1).type,'configure');assert.equal(writes.at(-1).pattern,'room');
+ assert.deepEqual(nodes.pattern.children.map(n=>n.value),Object.keys(context.StimulusPatterns.definitions));
+ const common={};
+ for(const pattern of ['noise-1f','stripes-high','stripes-low']) {
+  nodes.pattern.value=pattern;await nodes.pattern.onchange();assert.equal(writes.at(-1).pattern,pattern);
+  await nodes.start.onclick();const c=writes.at(-1);assert.equal(c.pattern,pattern);
+  common[pattern]=JSON.stringify([c.mode,c.frequencyHz,c.amplitudeDeg,c.durationSec,c.velocityDegSec,c.rampSec,c.holdSec]);
+ }
+ assert.equal(common['noise-1f'],common['stripes-high']);assert.equal(common['stripes-high'],common['stripes-low']);
  listeners['sessions/test/status']({val:()=>({instanceId:'quest',at:Date.now(),firebaseState:'接続済み',immersive:false,renderStarted:true,calibrated:false,xrPresenting:false,xrSessionActive:false})});
  nodes.pattern.value='grid';await nodes.applyPattern.onclick();assert.equal(writes.at(-1).type,'configure');assert.equal(writes.at(-1).pattern,'grid');
  const count=writes.length;await nodes.start.onclick();assert.equal(writes.length,count);assert(nodes.log.textContent.includes('実VRセッション'));
