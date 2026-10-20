@@ -3,6 +3,7 @@
 'use strict';
 const assert=require('node:assert/strict'), vm=require('node:vm'), fs=require('node:fs');
 const S=require('../stimulus-engine.js');
+const P=require('../stimulus-patterns.js');
 let now=0, tick, seq=0;
 class Vector3 {
   constructor(x=0,y=0,z=0){this.set(x,y,z);}
@@ -20,16 +21,18 @@ const scene={...element(),renderStarted:true,hasLoaded:true,camera:{},renderer:{
 const nodes={};
 const events={};
 const drawing=[];
-const canvasContext={fillStyle:'',fillRect(...args){drawing.push([this.fillStyle,...args]);}};
+const canvasContext={fillStyle:'',fillRect(...args){drawing.push([this.fillStyle,...args]);},createImageData:(w,h)=>({data:new Uint8ClampedArray(w*h*4)}),putImageData(){}};
 const document={readyState:'loading',body:{appendChild(){}},querySelector(s){if(s==='#scene-template')return {content:{firstElementChild:{cloneNode:()=>scene}}};return nodes[s] ||= {style:{},textContent:''};},createElement:()=>({getContext:()=>canvasContext}),addEventListener(){}};
 const THREE={Vector3,MathUtils:{degToRad:a=>a*Math.PI/180},DoubleSide:2,
+  SRGBColorSpace:'srgb',
   CanvasTexture:class {constructor(canvas){this.image=canvas;}},
-  CylinderGeometry:class {constructor(...args){this.args=args;}},
-  MeshBasicMaterial:class {constructor(options){Object.assign(this,options);}},
+  CylinderGeometry:class {constructor(...args){this.args=args;}dispose(){}},
+  PlaneGeometry:class {constructor(...args){this.args=args;}dispose(){}},
+  MeshBasicMaterial:class {constructor(options){Object.assign(this,options);}dispose(){}},
   Mesh:class {constructor(geometry,material){Object.assign(this,{geometry,material,position:new Vector3()});}}};
 const parent={postMessage(){}};
 const window={addEventListener:(name,fn)=>{events[name]=fn;},vrLastError:''};
-const sandbox={window,document,AFRAME:{THREE,registerComponent:(name,c)=>{tick=c.tick;}},Stimulus:S,crypto:require('node:crypto').webcrypto,
+const sandbox={window,document,AFRAME:{THREE,registerComponent:(name,c)=>{tick=c.tick;}},Stimulus:S,StimulusPatterns:P,crypto:require('node:crypto').webcrypto,
   URLSearchParams,location:{search:'?preview=1',origin:'http://test'},parent,isSecureContext:false,navigator:{},
   performance:{now:()=>now,timeOrigin:100000},Date,console,setTimeout:()=>1,clearTimeout(){},setInterval(){},reportStartupError:e=>{throw Error(e);}};
 window.AFRAME=sandbox.AFRAME;
@@ -57,6 +60,26 @@ async function flush(){await Promise.resolve();await Promise.resolve();}
  assert(world.object3D.rotation.x>0);command('emergency');await flush();assert.equal(world.object3D.rotation.x,0);
  command('configure',{pattern:'room'});await flush();assert.equal(room.object3D.visible,true);assert.equal(surround.object3D.visible,false);
  command('configure',{pattern:'grid'});await flush();assert.equal(surround.object3D.visible,true);
+ const trajectories=[];const textures=[];
+ for(const pattern of ['noise-1f','stripes-high','stripes-low']) {
+  command('configure',{pattern});await flush();
+  assert.equal(contrast.mesh.geometry.constructor,THREE.PlaneGeometry);
+  assert.deepEqual(contrast.mesh.geometry.args,[P.screen.widthM,P.screen.heightM]);
+  assert.deepEqual(contrast.mesh.position.toArray(),[0,P.screen.centerHeightM,-P.screen.distanceM]);
+  assert.equal(contrast.mesh.material.toneMapped,false);
+  assert.equal(contrast.mesh.material.map.colorSpace,THREE.SRGBColorSpace);
+  textures.push(contrast.mesh.material.map);
+  command('start',{mode:'sine',pattern,frequencyHz:.2});await flush();now+=3001;tick();
+  const path=[];
+  for(let i=0;i<200;i++){now+=10;tick();path.push(world.object3D.rotation.x);}
+  trajectories.push(path);
+  command('configure',{pattern:'room'});await flush();
+  assert.equal(contrast.object3D.visible,true,'Pattern cannot change while a trial is active');
+  command('emergency');await flush();assert.equal(world.object3D.rotation.x,0);
+ }
+ assert.deepEqual(trajectories[0],trajectories[1]);assert.deepEqual(trajectories[1],trajectories[2]);
+ command('configure',{pattern:'noise-1f'});await flush();assert.equal(contrast.mesh.material.map,textures[0],'Reuse the fixed noise texture');
+ command('configure',{pattern:'bad-id'});await flush();assert.equal(contrast.mesh.material.map,textures[0],'Invalid IDs cannot silently change patterns');
  assert.equal(window.vrLastError,'');
  // Non-preview production command path: static scene changes need no XR,
  // but calibration/START still require a real presenting session boundary.
@@ -74,5 +97,12 @@ async function flush(){await Promise.resolve();await Promise.resolve();}
  scene.renderer.xr.isPresenting=true;scene.renderer.xr.getSession=()=>({addEventListener(){}});
  scene.renderer.xr.getCamera=()=>({getWorldPosition:head=>head.set(0,1.6,0)});
  headset('calibrate');await flush();assert.equal(fixture.lastStatus().calibrated,true);assert.equal(fixture.lastStatus().immersive,true);assert.equal(fixture.lastStatus().aframeVR,false);
+ headset('start',{pattern:'noise-1f',mode:'sine',frequencyHz:.2,amplitudeDeg:5,durationSec:5,runId:'test-pattern-log'});await flush();
+ now+=3001;tick();now+=100;tick();headset('emergency');await flush();
+ const log=fixture.writes.find(w=>w.path.endsWith('/logs/test-quest/test-pattern-log'))?.value;
+ assert(log,'Pattern trial must produce a log');assert.equal(log.pattern,'noise-1f');
+ assert.equal(log.patternSettings.seed,P.get('noise-1f').seed);
+ assert.deepEqual(JSON.parse(JSON.stringify(log.patternSettings.screen)),P.screen);
+ assert(log.samples.length>0);
  console.log('PASS: production Quest ticks move TrapV/sin/legacy CSV, smooth STOP, emergency STOP, grid mesh/white surround, idle scene switching');
 })().catch(e=>{console.error(e);process.exitCode=1;});

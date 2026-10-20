@@ -2,6 +2,21 @@
   'use strict';
   const $ = id => document.getElementById(id);
   const tell = text => { $('log').textContent = text; };
+  const patternSelect=$('pattern');
+  for (const [id,definition] of Object.entries(StimulusPatterns.definitions)) {
+    const option=document.createElement('option');option.value=id;option.textContent=definition.label;
+    patternSelect.appendChild(option);
+  }
+  patternSelect.value=StimulusPatterns.defaultPattern;
+  function describePattern() {
+    const definition=StimulusPatterns.get(patternSelect.value), screen=StimulusPatterns.screen;
+    $('patternDescription').textContent=definition.kind === 'legacy' ?
+      (patternSelect.value === 'room' ? '既存の家具のある部屋です。3種類の平面パターン比較とは画面形状が異なります。' : '既存の半円筒：半径1 m・高さ6 m・正面180°、約10 cm間隔の縦横線。') :
+      `平面：正面${screen.distanceM} m・幅${screen.widthM} m×高さ${screen.heightM} m・中心高さ${screen.centerHeightM} m。` +
+      (definition.kind === 'noise' ? '静止1/f振幅ノイズ（パワー1/f²）、シード固定。' : `縦縞：1周期${StimulusPatterns.stripePeriodM*100} cm・コントラスト${definition.michelsonContrast*100}%。`) +
+      '足首中心の運動は全パターン共通。';
+  }
+  describePattern();
   const config = window.VR_REMOTE_CONFIG;
   if (!window.firebase || !config?.firebase) { $('authState').textContent = 'Firebaseの読み込みに失敗しました。再読み込みしてください。'; return; }
   firebase.initializeApp(config.firebase);
@@ -39,7 +54,7 @@
     quest = snap.val();
     const v = quest;
     if(v?.calibration) { $('measuredEye').textContent='Quest目高: '+v.calibration.measuredEyeHeightM+' m / 足首補正: '+v.calibration.manualAnkleHeightM+' m'; }
-    $('state').textContent = v ? v.status + ' / ' + (v.runId || v.lastRunId || '-') + ' / 適用角度 ' + Number(v.appliedAngleDeg || 0).toFixed(3) + '°' : 'Quest未接続';
+    $('state').textContent = v ? v.status + ' / ' + (v.runId || v.lastRunId || '-') + ' / 適用角度 ' + Number(v.appliedAngleDeg || 0).toFixed(3) + '° / 映像: ' + (StimulusPatterns.get(v.pattern)?.label || v.pattern || '不明') : 'Quest未接続';
     $('questDiagnostics').textContent = v ?
       `3D: ${v.renderStarted ? '描画中' : '未完了'} / VRボタン: ${v.vrButton ? '生成済み' : '未生成'} / WebXR: ${v.xrSupport || '不明'} / immersive-vr: ${v.immersive ? '開始済み' : '未開始'} / XR描画: ${v.xrPresenting ?? '不明'} / XRセッション: ${v.xrSessionActive ?? '不明'} / A-Frame VR: ${v.aframeVR ?? '不明'} / 位置合わせ: ${v.calibrated ? '完了' : '未完了'} / Firebase: ${v.firebaseState || '不明'} / 受信端末: ${v.client || '不明'} / 接続ID: ${v.instanceId || '-'}${v.startupError ? ' / 起動エラー: ' + v.startupError : ''}` : '';
     if (!awaiting || v?.commandSeq !== awaiting.seq) return;
@@ -62,7 +77,7 @@
       if (subscribed) root.child('status').off('value', receive);
       subscribed = false; quest = null; previewReady = false; $('preview').removeAttribute('src'); return;
     }
-    if (!$('preview').getAttribute('src')) $('preview').src = 'quest.html?preview=1&v=20261014-gridfix2';
+    if (!$('preview').getAttribute('src')) $('preview').src = 'quest.html?preview=1&v=20261020-patterns1';
     if (!subscribed) { subscribed = true; root.child('status').on('value', receive, error => tell('Quest状態の購読エラー: ' + error.message)); }
   });
   setInterval(() => {
@@ -110,7 +125,7 @@
   $('emergency').onclick = () => dispatch('emergency');
   let baselineRequest = false;
   $('baseline').onclick = async () => { baselineRequest = true; try { await dispatch('start'); } finally { baselineRequest = false; } };
-  $('pattern').onchange = () => dispatch('configure');
+  $('pattern').onchange = () => { describePattern(); return dispatch('configure'); };
   $('applyPattern').onclick = () => dispatch('configure');
   $('csvDownload').onclick = async () => { try { const logs=(await root.child('logs').get()).val() || {}; const rows=[['run_id','mode','pattern','elapsed_ms','applied_deg','commanded_deg','performance_ms','epoch_estimate_ms','metadata_json']]; for(const user of Object.values(logs)) for(const [id,log] of Object.entries(user)) { const {samples,...metadata}=log; for(const s of samples || []) rows.push([id,log.mode,log.pattern || 'room',...s,JSON.stringify(metadata)]); } const text=rows.map(r=>r.map(v=>'"'+String(v??'').replaceAll('"','""')+'"').join(',')).join('\r\n'); const a=document.createElement('a'); a.href=URL.createObjectURL(new Blob(['\uFEFF'+text],{type:'text/csv'}));a.download='quest-logs.csv';a.click();setTimeout(()=>URL.revokeObjectURL(a.href),1000); } catch(e){tell(e.message);} };
   $('download').onclick = async () => {

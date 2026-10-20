@@ -7,6 +7,7 @@ No Firebase requests, trial commands, or credentials reach the real backend.
 import functools
 import http.server
 import os
+import shutil
 from pathlib import Path
 import subprocess
 import tempfile
@@ -24,8 +25,11 @@ class BrowserChecks(unittest.TestCase):
     def setUpClass(cls):
         cls.temp = tempfile.TemporaryDirectory(prefix='quest-browser-')
         cls.aframe = Path(cls.temp.name) / 'aframe.min.js'
-        subprocess.run(['curl', '-fsSL', '--max-time', '60',
-                        'https://aframe.io/releases/1.7.0/aframe.min.js', '-o', str(cls.aframe)], check=True)
+        if os.environ.get('AFRAME_BUNDLE_PATH'):
+            shutil.copyfile(os.environ['AFRAME_BUNDLE_PATH'], cls.aframe)
+        else:
+            subprocess.run(['curl', '-fsSL', '--max-time', '60',
+                            'https://aframe.io/releases/1.7.0/aframe.min.js', '-o', str(cls.aframe)], check=True)
         handler = functools.partial(http.server.SimpleHTTPRequestHandler, directory=str(ROOT))
         cls.server = http.server.ThreadingHTTPServer(('127.0.0.1', 0), handler)
         threading.Thread(target=cls.server.serve_forever, daemon=True).start()
