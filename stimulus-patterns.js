@@ -1,21 +1,11 @@
-/* Shared visual-pattern definitions. No animation or motion math lives here. */
+/* Image generation only: no scene, camera, layout or motion imports. */
 (function (scope) {
   'use strict';
-  const version = 'visual-patterns-v1';
-  const textureSize = 512;
-  const seed = 20261020;
-  const screen = Object.freeze({ distanceM: 3, widthM: 6, heightM: 4, centerHeightM: 1.6 });
-  const stripePeriodM = 0.25;
-  const defaultPattern = 'grid'; // Preserve the existing initial operator selection.
-  const definitions = Object.freeze({
-    'noise-1f': Object.freeze({ label: '1/fノイズ（静止・固定シード）', kind: 'noise', amplitudeExponent: -1, seed }),
-    'stripes-high': Object.freeze({ label: '縦ストライプ（高コントラスト100%）', kind: 'stripes', michelsonContrast: 1 }),
-    'stripes-low': Object.freeze({ label: '縦ストライプ（低コントラスト10%）', kind: 'stripes', michelsonContrast: 0.1 }),
-    grid: Object.freeze({ label: '既存：黒格子の半円筒', kind: 'legacy' }),
-    room: Object.freeze({ label: '既存：家具のある部屋', kind: 'legacy' })
-  });
+  const config = scope.patternConfig || (typeof module !== 'undefined' ? require('./pattern-config.js') : null);
+  const version = 'pattern-layout-v2';
+  const definitions = config.patterns;
   const aliases = Object.freeze({ checker: 'grid', stripes: 'grid' });
-  function resolve(id) { return aliases[id] || id; }
+  function resolve(id) { return Object.hasOwn(aliases, id) ? aliases[id] : id; }
   function get(id) { return Object.hasOwn(definitions, resolve(id)) ? definitions[resolve(id)] : null; }
   function random(seedValue) {
     let state = seedValue >>> 0;
@@ -49,29 +39,34 @@
     }
     for (let i = 0; i < n; i++) { const a = base + i * stride; real[a] /= n; imag[a] /= n; }
   }
-  function noiseField(size, seedValue, widthM, heightM) {
-    if (!Number.isInteger(size) || size < 2 || size > 1024 || (size & (size - 1)) ||
-      !Number.isFinite(widthM) || widthM <= 0 || !Number.isFinite(heightM) || heightM <= 0) throw Error('ノイズ生成寸法が不正です');
-    const real = new Float64Array(size * size), imag = new Float64Array(size * size), next = random(seedValue);
-    // Hermitian spectrum: random phase, exactly 1/f amplitude, zero DC.
-    // Frequencies use cycles/metre on the physical screen, not texture pixels.
-    for (let y = 0; y < size; y++) for (let x = 0; x < size; x++) {
-      const a = y * size + x, b = ((size - y) % size) * size + (size - x) % size;
+  function noiseFieldRect(width, height, seed, slope, aspect) {
+    const powerOfTwo = n => Number.isInteger(n) && n >= 2 && n <= 1024 && !(n & (n - 1));
+    if (!powerOfTwo(width) || !powerOfTwo(height) || !Number.isInteger(seed) || seed < 0 || seed > 4294967295 ||
+      !Number.isFinite(slope) || !Number.isFinite(aspect) || aspect <= 0) throw Error('ノイズ設定が不正です（幅・高さは2の累乗、seedは整数）');
+    const real = new Float64Array(width * height), imag = new Float64Array(width * height), next = random(seed);
+    for (let y = 0; y < height; y++) for (let x = 0; x < width; x++) {
+      const a = y * width + x, b = ((height - y) % height) * width + (width - x) % width;
       if (!a || a > b) continue;
-      const fx = (x <= size / 2 ? x : x - size) / widthM;
-      const fy = (y <= size / 2 ? y : y - size) / heightM;
-      const amplitude = 1 / Math.hypot(fx, fy), phase = next() * 2 * Math.PI;
+      const fx = (x <= width / 2 ? x : x - width) / aspect;
+      const fy = y <= height / 2 ? y : y - height;
+      const amplitude = Math.hypot(fx, fy) ** slope, phase = next() * 2 * Math.PI;
+      if (!Number.isFinite(amplitude) || amplitude <= 0) throw Error('spectral slopeが数値範囲外です');
       real[a] = real[b] = amplitude * (a === b ? (phase < Math.PI ? -1 : 1) : Math.cos(phase));
       imag[a] = a === b ? 0 : amplitude * Math.sin(phase); imag[b] = -imag[a];
     }
-    for (let i = 0; i < size; i++) inverseLine(real, imag, i * size, 1, size);
-    for (let i = 0; i < size; i++) inverseLine(real, imag, i, size, size);
-    // A single linear gain preserves the spectrum; no clipping or histogram equalization.
+    for (let y = 0; y < height; y++) inverseLine(real, imag, y * width, 1, width);
+    for (let x = 0; x < width; x++) inverseLine(real, imag, x, width, height);
     let mean = 0, peak = 0;
     for (const value of real) mean += value / real.length;
     for (const value of real) peak = Math.max(peak, Math.abs(value - mean));
+    if (!Number.isFinite(peak) || peak === 0) throw Error('ノイズを正規化できません');
     for (let i = 0; i < real.length; i++) real[i] = (real[i] - mean) / peak;
     return real;
+  }
+  // Compatibility helper for numerical tests; these are frequency coordinates, not a scene import.
+  function noiseField(size, seed, frequencyWidth, frequencyHeight) {
+    if (![frequencyWidth, frequencyHeight].every(n => Number.isFinite(n) && n > 0)) throw Error('周波数座標が不正です');
+    return noiseFieldRect(size, size, seed, -1, frequencyWidth / frequencyHeight);
   }
   function srgbByte(linear) {
     const value = Math.max(0, Math.min(1, linear));
@@ -81,42 +76,44 @@
     const value = byte / 255;
     return value <= .04045 ? value / 12.92 : ((value + .055) / 1.055) ** 2.4;
   }
-  function pixels(id, screen, periodM, size = textureSize) {
-    const definition = get(id);
-    if (!definition || definition.kind === 'legacy') throw Error('平面パターンが不正です');
-    if (!Number.isInteger(size) || size < 2 || size > 1024 ||
-      !Number.isFinite(screen.widthM) || screen.widthM <= 0 || !Number.isFinite(screen.heightM) || screen.heightM <= 0 ||
-      !Number.isFinite(periodM) || periodM <= 0) throw Error('パターン寸法が不正です');
-    const field = definition.kind === 'noise' ? noiseField(size, definition.seed, screen.widthM, screen.heightM) : null;
-    const rgba = new Uint8ClampedArray(size * size * 4);
+  function generate(id, overrides = {}) {
+    const base = get(id), definition = { ...base, ...overrides };
+    if (!base || base.kind === 'legacy') throw Error('画像パターンが不正です');
+    const { width, height, brightness, contrast } = definition;
+    if (![width, height].every(n => Number.isInteger(n) && n >= 2 && n <= 1024) ||
+      !Number.isFinite(brightness) || brightness < 0 || brightness > 1 ||
+      !Number.isFinite(contrast) || contrast < 0 || contrast > 1 || brightness * (1 + contrast) > 1 + 1e-12) {
+      throw Error('画像寸法・brightness・contrastが不正です（brightness×(1+contrast)≤1）');
+    }
+    if (definition.kind === 'stripes' && (!Number.isFinite(definition.orientation) || !Number.isFinite(definition.stripeCount) || definition.stripeCount <= 0)) throw Error('ストライプ設定が不正です');
+    if (!['noise', 'stripes'].includes(definition.kind)) throw Error('未対応の模様です');
+    const field = definition.kind === 'noise' ? noiseFieldRect(width, height, definition.seed, definition.spectralSlope, definition.spectralAspect) : null;
+    const rgba = new Uint8ClampedArray(width * height * 4), angle = (definition.orientation || 0) * Math.PI / 180;
     let min = 1, max = 0, sum = 0, squared = 0;
-    for (let y = 0; y < size; y++) for (let x = 0; x < size; x++) {
-      const i = y * size + x;
-      const sign = Math.floor((x + .5) / size * screen.widthM / periodM * 2) % 2 ? -1 : 1;
-      const target = .5 + .5 * (field ? field[i] : definition.michelsonContrast * sign);
+    for (let y = 0; y < height; y++) for (let x = 0; x < width; x++) {
+      const i = y * width + x;
+      const coordinate = (x + .5) / width * Math.cos(angle) + (1 - (y + .5) / height) * Math.sin(angle);
+      const sign = ((Math.floor(coordinate * definition.stripeCount * 2) % 2) + 2) % 2 ? -1 : 1;
+      const target = brightness * (1 + contrast * (field ? field[i] : sign));
       const byte = srgbByte(target), linear = srgbLinear(byte);
       rgba[i * 4] = rgba[i * 4 + 1] = rgba[i * 4 + 2] = byte; rgba[i * 4 + 3] = 255;
       min = Math.min(min, linear); max = Math.max(max, linear); sum += linear; squared += linear * linear;
     }
-    const mean = sum / (size * size);
-    return { rgba, statistics: { digitalLinearMin: min, digitalLinearMax: max, digitalLinearMean: mean,
-      digitalMichelsonContrast: (max - min) / (max + min),
-      digitalRmsContrast: Math.sqrt(Math.max(0, squared / (size * size) - mean * mean)) / mean } };
+    const mean = sum / (width * height);
+    const statistics = { digitalLinearMin: min, digitalLinearMax: max, digitalLinearMean: mean,
+      digitalMichelsonContrast: max + min ? (max - min) / (max + min) : 0,
+      digitalRmsContrast: mean ? Math.sqrt(Math.max(0, squared / (width * height) - mean * mean)) / mean : 0 };
+    return { width, height, rgba, statistics, metadata: metadata(id, statistics, definition) };
   }
-  function metadata(id, statistics) {
-    const definition = get(id);
-    if (!definition) throw Error('映像パターン不正');
-    const common = { version, id: resolve(id), label: definition.label };
-    if (definition.kind === 'legacy') return { ...common, surface: id === 'room' ? 'room' : 'legacy-cylinder' };
-    return { ...common, surface: 'plane', screen: { ...screen }, textureSize,
-      nominalLinearMean: .5, textureColorSpace: 'sRGB encoding of linear luminance',
-      ...(definition.kind === 'noise' ? { seed: definition.seed, amplitudeExponent: -1, powerExponent: -2, static: true,
-        frequencyUnits: 'cycles/metre', dc: 0, normalization: 'zero mean, global peak normalization, then L=0.5+0.5*field' } :
-        { orientation: 'vertical', waveform: 'square', periodM: stripePeriodM, dutyCycle: .5, nominalMichelsonContrast: definition.michelsonContrast }),
-      ...(statistics || {}) };
+  function metadata(id, statistics, definition = get(id)) {
+    if (!definition) throw Error('画像パターン不正');
+    return { version, id: resolve(id), ...definition,
+      ...(definition.kind === 'noise' ? { amplitudeExponent: definition.spectralSlope, powerExponent: 2 * definition.spectralSlope, static: true, dc: 0,
+        frequencyUnits: 'cycles/image-height, x scaled by spectralAspect', normalization: 'zero mean, peak-normalized field' } : {}),
+      textureColorSpace: 'sRGB encoding of linear luminance', ...(statistics || {}) };
   }
-  const api = Object.freeze({ version, textureSize, screen, stripePeriodM, defaultPattern, definitions, resolve, get,
-    noiseField, srgbByte, srgbLinear, pixels, metadata });
+  const api = Object.freeze({ version, definitions, defaultPattern: config.defaultPattern, resolve, get, generate,
+    noiseField, noiseFieldRect, srgbByte, srgbLinear, metadata });
   scope.StimulusPatterns = api;
   if (typeof module !== 'undefined') module.exports = api;
 })(globalThis);

@@ -117,11 +117,18 @@ window.addEventListener('unhandledrejection',e=>reportStartupError([e.reason?.me
     <a-entity id="contrast-pattern" visible="false"></a-entity>
   </a-entity>
   <!-- Keep the unpatterned surround white in immersive VR as well as desktop. -->
+  <a-entity id="kiemel-environment" visible="false"></a-entity>
   <a-sky id="contrast-surround" color="#ffffff" material="shader: flat" visible="false"></a-sky>
   <a-entity position="0 0 0"><a-camera wasd-controls="enabled: false" look-controls="enabled: true"></a-camera></a-entity>
 </a-scene>
 </template>
 <script defer src="stimulus-engine.js?v=20261014-gridfix2"></script>
-<script defer src="stimulus-patterns.js?v=20261020-patterns1"></script>
-<script defer src="quest-runtime.js?v=20261020-patterns1"></script>
+<script defer src="pattern-config.js?v=20261021-kiemel1"></script>
+<script defer src="layout-config.js?v=20261020-layout2"></script>
+<script defer src="motion-config.js?v=20261020-layout2"></script>
+<script defer src="stimulus-patterns.js?v=20261020-layout2"></script>
+<script defer src="kiemel-config.js?v=20261021-kiemel1"></script>
+<script defer src="kiemel-motion.js?v=20261021-kiemel1"></script>
+<script defer src="kiemel-environment.js?v=20261021-kiemel1"></script>
+<script defer src="quest-runtime.js?v=20261021-kiemel1"></script>
 </body></html>
