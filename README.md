@@ -129,7 +129,7 @@ python3 tests/pattern_browser_checks.py
 
 ### 固定3面スクリーン投影（feature/kiemel-fixed-projection）
 
-`kiemel-projection.js` が各スクリーンに対応する非対称（off-axis）投影カメラを作成します。カメラの位置は校正眼原点O、3枚のスクリーンはOから正面1.07 m／左右1.52 mの位置で固定します。投影元の仮想環境だけに運動を適用し、同じ基準眼位置から3枚のレンダーターゲットに描画します。Questの追跡カメラは、この固定スクリーンを自然に見回すために使います。頭の現在位置は投影元カメラへ渡しません。各壁のローカルu/v/法線からnear面の左右上下範囲を求めるため、正面と側面の接合線で投影の方向が一致します。ターゲット更新後はXR・描画先・viewport・scissor・autoClearを復元します。
+`kiemel-projection.js` が各スクリーンに対応する非対称（off-axis）投影カメラを作成します。カメラの位置は校正眼原点O、3枚のスクリーンはOから正面1.07 m／左右1.52 mの位置で固定します。投影元の仮想環境だけに運動を適用し、同じ基準眼位置から3枚のレンダーターゲットに描画します。Questの追跡カメラは、この固定スクリーンを自然に見回すために使います。頭の現在位置は投影元カメラへ渡しません。各壁のローカルu/v/法線からnear面の左右上下範囲を求めるため、正面と側面の接合線で投影の方向が一致します。ターゲット更新はtickで直接実行せず、メインシーンのonBeforeRenderでまとめて行います。ターゲット更新後はXR・描画先（face/mipmapを含む）・クリア色/alpha・autoClearを復元します。viewport/scissorはsetRenderTargetによる描画先固有の復元に任せ、通常キャンバスの論理viewportをXRターゲットへ適用しません。
 
 編集箇所：`kiemel-config.js` の `projection.resolution` は各画面のテクスチャ解像度（初期1024×1024、256〜2048）。これはQuest向けの工学的設定で、論文値ではありません。固定視点の投影と固定スクリーンは原装置に近づけましたが、HMDの視野、解像度、更新頻度、両眼で仮想画面を見る光学条件、描画遅延は物理CAVEとは異なります。Quest実機でフレーム落ちと画面の接合を確認してください。原論文の60 Hzを保証する実装ではありません。
 
@@ -252,3 +252,9 @@ python3 tests/browser_checks.py
 The suite fetches the pinned official A-Frame 1.7.0 bundle with TLS verification, runs its real scene and WebGL renderer using Chromium/SwiftShader, and uses test-only Firebase and XR state boundaries. No real Firebase experiment commands, authentication requests, or status/log writes are sent. It covers rendering, standard VR UI, delayed/failed Firebase loading, XR event order, reentry/calibration, sine/baseline/CSV playback and logs, pivot geometry, CSV cancellation, stale commands/reloads/reconnects, duplicates, graphics loss, nonblocking log upload, and preview isolation/PC feedback.
 
 Real Quest WebXR entry, controller interaction, tracking accuracy, actual Firebase permissions, stimulus timing, and research validity still require device/backend checks. Do not treat software WebGL or mocked XR results as a physical headset result.
+
+### START後の明滅への対策（feature/kiemel-xr-flicker）
+
+投影画像の更新をtick中の即時描画からメイン描画直前の1バッチに変更しました。コマンド処理は更新要求だけを出し、刺激の時間計算・波形・振幅・形状は変更しません。旧処理では通常キャンバスの論理viewport/scissorを保存し、XR描画先へ再設定していました。XR描画先が異なる大きさ・領域を使う場合にそれを上書きする問題を修正しました。クリア色・alpha、active cube face/mipmapも復元します。
+
+`node tests/projection_state_checks.js` はXRと通常画面の領域を異ならせ、正常時・描画例外時の状態復元と更新要求の集約を検証します。ブラウザでも実WebGLターゲットに非標準viewport/scissorを設定し、保持されることを確認します。これらは実QuestのXRフレームバッファを使う試験ではありません。今回の実機の明滅原因がこの問題だけだったかは未確定で、Questでの再確認が必要です。

@@ -99,7 +99,7 @@ class KiemelBrowserChecks(browser_checks.BrowserChecks):
             let hash=2166136261,white=0;for(let i=0;i<bytes.length;i+=4){hash=Math.imul(hash^bytes[i],16777619)>>>0;if(bytes[i]>250)white++;}return {hash,white};
           });
           const screens=p.views.map(v=>v.screen.matrixWorld.toArray()),cameras=p.views.map(v=>v.camera.matrixWorld.toArray());
-          const initial=snapshot();fixture.now=performance.now();Object.defineProperty(performance,'now',{value:()=>fixture.now});fixture.now+=15000;s.components['stimulus-driver'].tick();
+          const initial=snapshot();fixture.now=performance.now();Object.defineProperty(performance,'now',{value:()=>fixture.now});fixture.now+=15000;s.components['stimulus-driver'].tick();s.renderer.render(s.object3D,s.camera);
           const moved=snapshot();s.camera.position.x+=.2;s.camera.rotation.y+=.3;s.camera.updateMatrixWorld(true);
           const enabled=s.renderer.xr.enabled,oldTarget=s.renderer.getRenderTarget();s.renderer.xr.enabled=true;
           KiemelProjection.render(s.renderer,group);const restored=s.renderer.xr.enabled&&s.renderer.getRenderTarget()===oldTarget;s.renderer.xr.enabled=enabled;
@@ -110,6 +110,23 @@ class KiemelBrowserChecks(browser_checks.BrowserChecks):
             self.assertGreater(initial['white'],100);self.assertNotEqual(initial['hash'],moved['hash'])
         self.assertEqual(result['moved'],result['afterHead'])
         self.assertEqual(self.errors,[])
+
+    def test_kiemel_xr_target_viewport_and_clear_state_restoration(self):
+        self.quest()
+        result=self.page.evaluate('''()=>{
+          const s=document.querySelector('a-scene'),r=s.renderer,T=AFRAME.THREE;
+          s.pause();r.setAnimationLoop(null);
+          const group=document.querySelector('#kiemel-environment').getObject3D('mesh');
+          const target=new T.WebGLRenderTarget(800,600);target.viewport.set(30,40,500,400);target.scissor.set(50,60,300,200);target.scissorTest=true;
+          r.setViewport(1,2,100,110);r.setRenderTarget(target);r.setClearColor(0x990044,.3);r.autoClear=false;r.xr.enabled=true;
+          KiemelProjection.request(group);const before=group.userData.projection.updateCount;
+          KiemelProjection.renderPending(r,group);KiemelProjection.renderPending(r,group);
+          const gl=r.getContext(),result={viewport:r.getCurrentViewport(new T.Vector4()).toArray(),scissor:Array.from(gl.getParameter(gl.SCISSOR_BOX)),scissorTest:gl.isEnabled(gl.SCISSOR_TEST),sameTarget:r.getRenderTarget()===target,enabled:r.xr.enabled,autoClear:r.autoClear,color:r.getClearColor(new T.Color()).getHex(),alpha:r.getClearAlpha(),batches:group.userData.projection.updateCount-before};
+          r.xr.enabled=false;r.setRenderTarget(null);target.dispose();return result;
+        }''')
+        self.assertEqual(result['viewport'],[30,40,500,400]);self.assertEqual(result['scissor'],[50,60,300,200]);self.assertTrue(result['scissorTest'])
+        self.assertTrue(result['sameTarget']);self.assertTrue(result['enabled']);self.assertFalse(result['autoClear']);self.assertEqual(result['color'],0x990044);self.assertAlmostEqual(result['alpha'],.3)
+        self.assertEqual(result['batches'],1);self.assertEqual(self.errors,[])
 
     def test_kiemel_operator_preview_and_protocol(self):
         self.page.goto(self.base+'/operator.html')
