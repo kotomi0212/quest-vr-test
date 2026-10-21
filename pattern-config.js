@@ -5,6 +5,7 @@
     // PCの初期選択。noise-1f / stripes-high / stripes-low / grid / room
     defaultPattern: 'grid',
     patterns: {
+      'kiemel-triangles': { label: 'Kiemel：黒背景・白三角形の3面', kind: 'kiemel' },
       'noise-1f': {
         label: '空間ノイズ（初期値1/f）', kind: 'noise',
         width: 512, height: 512,       // FFTのため2の累乗（2～1024）

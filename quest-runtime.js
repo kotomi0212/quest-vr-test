@@ -16,6 +16,63 @@
   const pivot = new THREE.Vector3(0, 0.088, 0); // 校正原点。motionConfigの固定中心とは独立。
   const patternTextures = new Map();
   let selectedPattern = 'room';
+  let kiemelConfig=KiemelConfig.clone(KiemelConfig.CONFIG), kiemelModel=null, originInitialized=false;
+  const kiemelOrigin=new THREE.Vector3(), kiemelAxis=new THREE.Vector3(1,0,0), kiemelCache=new Map();
+  function trackedEyeCenter(target) {
+    const camera=scene.renderer.xr.getCamera(scene.camera);
+    const eyes=(camera.cameras||[]).map(eye=>eye.matrixWorld?.elements?.slice(12,15)).filter(p=>p?.length===3&&p.every(Number.isFinite));
+    if(eyes.length>=2) {
+      target.set(...[0,1,2].map(i=>eyes.reduce((sum,p)=>sum+p[i],0)/eyes.length));
+      return 'mean XR view world positions; no temporal averaging';
+    }
+    camera.getWorldPosition(target);return 'XR camera position; stereo matrices unavailable';
+  }
+  function candidateKiemel(c,bodyRequired=false) {
+    const cfg=KiemelConfig.clone(c.kiemel || KiemelConfig.CONFIG);
+    KiemelMotion.validate(cfg,bodyRequired);KiemelEnvironment.walls(cfg.geometry);return cfg;
+  }
+  function resetKiemel() {
+    const el=scene.querySelector('#kiemel-environment');
+    if(el) {el.object3D.setRotationFromAxisAngle(kiemelAxis,0);el.object3D.position.copy(kiemelOrigin);}
+  }
+  function applyKiemel(pose) {
+    const world=scene.querySelector('#kiemel-environment').object3D;
+    const center=new THREE.Vector3(...pose.pivot),angle=KiemelMotion.rad(pose.angleDeg);
+    world.setRotationFromAxisAngle(kiemelAxis,angle);
+    world.position.copy(center).sub(center.clone().applyAxisAngle(kiemelAxis,angle));
+    world.position.set(world.position.x+kiemelOrigin.x,world.position.y+kiemelOrigin.y,world.position.z+kiemelOrigin.z+pose.translationZ);
+  }
+  function tickKiemel(now) {
+    const elapsed=(now-active.startedPerf)/1000;
+    let pose=KiemelMotion.at(elapsed,active.kiemel,active.cmd.mode==='baseline'),stopComplete=false;
+    if(active.returning) {
+      const u=Math.min(1,(now-active.returning.at)/2000),factor=1-u*u*(3-2*u);
+      pose={...KiemelMotion.pose(active.returning.ankleReferenceDeg*factor,active.kiemel.body,active.kiemel.motion.type),phase:'returning'};
+      stopComplete=u===1;
+    }
+    applyKiemel(pose);active.lastPose=pose;active.actualAngle=pose.angleDeg;
+    if(active.lastSamplePerf!==undefined)active.maxIntervalMs=Math.max(active.maxIntervalMs||0,now-active.lastSamplePerf);
+    active.lastSamplePerf=now;
+    active.samples.push([Math.round(elapsed*1000),pose.angleDeg,active.returning?0:pose.angleDeg,now,performance.timeOrigin+now,
+      pose.translationZ,active.returning?0:pose.translationZ,pose.ankleReferenceDeg,pose.eyeLinearZ,pose.eyeExactZ,pose.phase]);
+    if(pose.phase!==active.lastPhase) {
+      active.lastPhase=pose.phase;show('Kiemel '+pose.phase+' / '+active.kiemel.motion.type);
+      ack(pose.phase==='stimulus'?'running':pose.phase,{runId:active.cmd.runId});
+    }
+    if(stopComplete)finish('stopped');else if(pose.phase==='completed')finish('completed');
+  }
+  function selectKiemel() {
+    if(!originInitialized) {scene.camera?.getWorldPosition?.(kiemelOrigin);originInitialized=true;}
+    const p=kiemelConfig.pattern, geometryPattern={...p};delete geometryPattern.fixationPoint;
+    const key=JSON.stringify([kiemelConfig.geometry,geometryPattern]);
+    if(!kiemelCache.has(key)) {
+      const model=KiemelEnvironment.generate(kiemelConfig);
+      kiemelCache.set(key,{model,group:KiemelEnvironment.build(THREE,model,p)});
+    }
+    const entry=kiemelCache.get(key);kiemelModel=entry.model;
+    entry.group.userData.fixation.visible=p.fixationPoint;
+    scene.querySelector('#kiemel-environment').setObject3D('mesh',entry.group);resetKiemel();
+  }
   // 配置の原点と運動の回転中心は別。pivotは既存のキャリブレーション結果。
   const axisLength=Math.hypot(motionConfig.rotationAxis.x,motionConfig.rotationAxis.y,motionConfig.rotationAxis.z);
   if (!Number.isFinite(axisLength) || !axisLength) throw Error('motionConfig.rotationAxisが不正です');
@@ -29,10 +86,19 @@
     return new THREE.Vector3(...values);
   }
   function layoutSettings() {
+    if(selectedPattern==='kiemel-triangles')return {profile:'Kiemel',geometry:KiemelConfig.clone(kiemelConfig.geometry),walls:kiemelModel?.walls.map(({id,width,height,center,u,v})=>({id,width,height,center,u,v}))||null,eyeOrigin:kiemelOrigin.toArray(),coordinateSystem:'fixed eye origin; +X right,+Y up,+Z posterior'};
     return { ...JSON.parse(JSON.stringify(layoutConfig)), anchorOriginM: layoutConfig.anchor === 'calibrated-xz' ? {x:pivot.x,y:0,z:pivot.z} : {x:0,y:0,z:0} };
   }
-  function motionSettings() { return { ...JSON.parse(JSON.stringify(motionConfig)), resolvedPivotM:rotationPivot().toArray(), normalizedAxis:motionAxis.toArray() }; }
+  function motionSettings() {
+    if(selectedPattern==='kiemel-triangles') {
+      let dimensions=null;try{dimensions=KiemelMotion.bodyDimensions(kiemelConfig.body);}catch{/* Static display may precede body entry. */}
+      return {profile:'Kiemel',...KiemelConfig.clone(kiemelConfig.motion),rotationAxis:[1,0,0],anklePivotLocal:dimensions?[0,-dimensions.H,0]:null,hipPivotLocal:dimensions?[0,-dimensions.l2,0]:null,
+        anklePivotWorld:dimensions?[kiemelOrigin.x,kiemelOrigin.y-dimensions.H,kiemelOrigin.z]:null,hipPivotWorld:dimensions?[kiemelOrigin.x,kiemelOrigin.y-dimensions.l2,kiemelOrigin.z]:null,approximationBounds:dimensions?KiemelMotion.bounds(kiemelConfig):null};
+    }
+    return { ...JSON.parse(JSON.stringify(motionConfig)), resolvedPivotM:rotationPivot().toArray(), normalizedAxis:motionAxis.toArray() };
+  }
   function patternSettings() {
+    if(selectedPattern==='kiemel-triangles')return {profile:'Kiemel-user-specification',generatorVersion:'kiemel-environment-v1',...KiemelConfig.clone(kiemelConfig.pattern),fingerprint:kiemelModel?.fingerprint||null,totalCount:kiemelModel?.count||null};
     return patternTextures.get(selectedPattern)?.metadata || StimulusPatterns.metadata(selectedPattern);
   }
   const show = message => { document.querySelector('#status').textContent = message; };
@@ -48,6 +114,7 @@
       xrSessionActive: !!scene.renderer?.xr.getSession(),
       aframeVR: scene.is('vr-mode'), client: navigator.userAgent || 'unknown',
       pattern: selectedPattern, patternSettings: patternSettings(), layoutSettings:layoutSettings(), motionSettings:motionSettings(),
+      translationZ:active?.lastPose?.translationZ||0,kiemelPhase:active?.lastPose?.phase||null,kiemelCondition:selectedPattern==='kiemel-triangles'?(active?.kiemel||kiemelConfig).motion.type:null,
       appliedAngleDeg: active?.actualAngle || 0, startupError: window.vrLastError || '' };
   }
   function updateDiagnostics() {
@@ -71,6 +138,11 @@
     if (!definition) throw Error('映像パターン不正');
     pattern = StimulusPatterns.resolve(pattern);
     selectedPattern = pattern;
+    const isKiemel=pattern==='kiemel-triangles';
+    scene.querySelector('#visual-world').object3D.visible=!isKiemel;
+    scene.querySelector('#kiemel-environment').object3D.visible=isKiemel;
+    scene.querySelector('#contrast-surround').setAttribute('color',isKiemel?'#000000':'#ffffff');
+    if(isKiemel) {scene.querySelector('#contrast-surround').object3D.visible=true;selectKiemel();return;}
     scene.querySelector('#room-pattern').object3D.visible = pattern === 'room';
     scene.querySelector('#contrast-surround').object3D.visible = pattern !== 'room';
     const el = scene.querySelector('#contrast-pattern');
@@ -123,7 +195,7 @@
   function finish(reason = 'completed') {
     cancelPending();
     const trial = active;
-    active = null; rotate(0);
+    active = null; rotate(0);resetKiemel();
     if (!trial) return;
     show('停止・終了 (' + reason + ') / 室内は静止表示');
     ack('idle', { lastRunId: trial.cmd.runId, reason });
@@ -132,7 +204,12 @@
     const payload = { ...c, reason, startedAtQuestWallClockMs: trial.startedWallMs,
       endedAtQuestWallClockMs: Date.now(), anklePivotM: trial.pivot, calibration: trial.calibration, patternSettings: trial.patternSettings, layoutSettings:trial.layoutSettings, motionSettings:trial.motionSettings, timeOriginMs: performance.timeOrigin, serverOffsetMs: serverOffset, sampleColumns: ['elapsed_ms','applied_deg','commanded_deg','performance_ms','epoch_estimate_ms'],
       samples: trial.samples,
-      note: 'Applied angle is software transform, not measured photon output. Approximate modern room, not an exact paper reproduction. Ankle x/z approximate the point below the head. samples=[elapsed_ms,visual_world_rotation_deg]. Quest wall-clock timestamps are not synchronized with external sensors.' };
+      note: 'Software transforms, not measured photon output. Quest wall-clock timestamps are not synchronized with external sensors.' };
+    if(trial.kiemel) {
+      payload.kiemel=trial.kiemel;payload.kiemelCalibration=trial.kiemelCalibration;
+      payload.sampleColumns=['elapsed_ms','applied_deg','commanded_deg','performance_ms','epoch_estimate_ms','translation_z_m','commanded_translation_z_m','ankle_reference_deg','eye_linear_z_m','eye_exact_z_m','phase'];
+      payload.timingSummary={frameCount:trial.samples.length,meanHz:trial.samples.length>1?(trial.samples.length-1)*1000/(trial.samples.at(-1)[3]-trial.samples[0][3]):null,maxIntervalMs:trial.maxIntervalMs||0,nominalXRHz:trial.nominalXRHz||null,paperDisplayHz:60};
+    }
     // Saving a completed log must not block STOP or a new command.
     root.child('logs/' + user.uid + '/' + c.runId).set(payload).catch(error => {
       console.error(error); ack('log-error', { commandSeq: c.seq, lastRunId: c.runId, error: error.message });
@@ -170,7 +247,7 @@
     lastSeq = c.seq; commandSeq = c.seq;
     if (c.type === 'return') {
       cancelPending();
-      if (active && active.startedPerf !== null) { active.returning ||= { at: performance.now(), angle: active.actualAngle || 0 }; ack('returning'); }
+      if (active && active.startedPerf !== null) { active.returning ||= { at: performance.now(), angle: active.actualAngle || 0,ankleReferenceDeg:active.lastPose?.ankleReferenceDeg||0 }; ack('returning'); }
       else { finish('stopped'); ack('idle'); }
       return;
     }
@@ -186,11 +263,23 @@
       if (!rendered()) { block('3D描画の初期化が未完了です'); return; }
       if (active || pending) { block('映像変更はSTOP後に行ってください'); return; }
       if (!StimulusPatterns.get(c.pattern)) { block('映像パターン不正'); return; }
+      if(c.pattern==='kiemel-triangles') {try{kiemelConfig=candidateKiemel(c);}catch(e){block(e.message);return;}}
       selectPattern(c.pattern); ack(ready() ? 'ready' : 'connected', { configured: true }); return;
     }
     if (!ready()) { block(rendered() ? 'enter VR before START（immersive-vr未開始）' : '3D描画の初期化が未完了です'); return; }
     if (c.type === 'calibrate') {
       if (active || pending) { block('STOPしてから位置合わせしてください'); return; }
+      if(c.protocol==='kiemel') {
+        let cfg;try{cfg=candidateKiemel(c,true);}catch(e){block(e.message);return;}
+        const head=new THREE.Vector3();let eyeReference='PC preview only';
+        if(preview) {head.set(0,cfg.body.eyeHeight,0);scene.querySelector('a-camera').setAttribute('position',{x:0,y:head.y,z:0});}
+        else eyeReference=trackedEyeCenter(head);
+        kiemelConfig=cfg;kiemelOrigin.copy(head);originInitialized=true;
+        const dimensions=KiemelMotion.bodyDimensions(cfg.body);
+        calibration={measuredEyeHeightM:preview?null:head.y,manualAnkleHeightM:cfg.body.ankleHeight,calibratedAtMs:Date.now(),kiemel:{body:KiemelConfig.clone(cfg.body),origin:head.toArray(),eyeReference,...dimensions,inputEyeMinusTrackedEyeM:preview?null:cfg.body.eyeHeight-head.y}};
+        calibrated=true;rotate(0);selectPattern('kiemel-triangles');
+        show('Kiemel位置合わせ完了。眼基準原点を固定しました');ack('ready',{calibration});return;
+      }
       if (!Number.isFinite(c.heightCm) || c.heightCm < 100 || c.heightCm > 220) { block('身長が範囲外です'); return; }
       if (!Number.isFinite(c.ankleHeightM) || c.ankleHeightM < 0 || c.ankleHeightM > 0.2) { block('足首の高さが不正です'); return; }
       if (c.pattern && !StimulusPatterns.get(c.pattern)) { block('映像パターン不正'); return; }
@@ -208,6 +297,16 @@
     }
     if (c.type !== 'start') return;
     if (!calibrated) { block('PCで立ち位置合わせが必要です'); return; }
+    if(c.protocol==='kiemel') {
+      if(active||pending){block('STOP後に次の条件を開始してください');return;}
+      let cfg;try{cfg=candidateKiemel(c,true);}catch(e){block(e.message);return;}
+      if(!['kiemel','baseline'].includes(c.mode)||!/^[A-Za-z0-9_-]{1,100}$/.test(c.runId||'')){block('Kiemel開始指令が不正です');return;}
+      if(!calibration?.kiemel||['ankleHeight','hipHeight','eyeHeight'].some(key=>calibration.kiemel.body[key]!==cfg.body[key])){block('身体寸法を入力しKiemelの位置合わせをしてください');return;}
+      kiemelConfig=cfg;selectPattern('kiemel-triangles');
+      const now=performance.now();active={cmd:{...c,pattern:'kiemel-triangles'},kiemel:cfg,kiemelCalibration:KiemelConfig.clone(calibration.kiemel),samples:[],pivot:pivot.toArray(),calibration,patternSettings:patternSettings(),layoutSettings:layoutSettings(),motionSettings:motionSettings(),startedPerf:now,startedWallMs:Date.now(),actualAngle:0,lastPhase:'pre-static',nominalXRHz:scene.renderer.xr.getSession()?.frameRate||null};
+      resetKiemel();ack('pre-static',{runId:c.runId});return;
+    }
+    if(c.mode==='kiemel'||c.pattern==='kiemel-triangles'){block('Kiemelのプロトコル指令が必要です');return;}
     if (!['baseline', 'sine', 'csv', 'trapv'].includes(c.mode) || !Number.isFinite(c.durationSec) || c.durationSec < 5 || c.durationSec > 600 ||
       !/^[A-Za-z0-9_-]{1,100}$/.test(c.runId || '') ||
       (c.mode === 'sine' && (!Number.isFinite(c.frequencyHz) || c.frequencyHz <= 0 || c.frequencyHz > 2 ||
@@ -252,6 +351,7 @@
       if (!active) return;
       if (!ready()) { finish('not-ready'); return; }
       const now = performance.now();
+      if(active.kiemel){tickKiemel(now);return;}
       if (active.startedPerf === null) {
         if (now - active.preludePerf < 3000) return;
         active.startedPerf = now; active.startedWallMs = Date.now();

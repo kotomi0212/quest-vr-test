@@ -117,6 +117,102 @@ python3 tests/pattern_browser_checks.py
 
 ブラウザ検証には既存のPython Playwright／Chromiumを使います。公式A-Frame 1.7.0バンドルをTLS検証付きで取得します。取得済みの検証済みバンドルは `AFRAME_BUNDLE_PATH=/path/to/aframe.min.js` で指定可能です。画像調整、矩形ノイズ、配置変更で画像が変わらないこと、任意の固定中心とY軸回転、従来の初期値・停止処理・PC操作を確認します。FirebaseとXR境界は模擬であり、本番データには書き込みません。Quest実機の動作・表示タイミング・輝度は未検証です。
 
+## Kiemel 2011仕様の追加（feature/kiemel-2011）
+
+**原論文本文は外部取得・照合していません。以下はユーザーが提示したKiemel仕様に基づく実装です。** 数学・配置・指令処理はNodeで検証しました。ヘッドレスChromiumのWebGL描画、三条件の実シーン変換、PCプレビューと指令送信も検証しました。XRイベントとFirebaseは模擬しており、Quest実機のimmersive-vrと実通信は未検証です。既存の部屋、ノイズ、縞、TrapV、sin、Baselineは維持します。
+
+### ファイルと変更する値
+
+| 役割 | 編集箇所 |
+| --- | --- |
+| 設定・復元基準 | `kiemel-config.js` の `referencePreset`（固定の基準）と `CONFIG`（編集用コピー） |
+| 壁までの距離 | `CONFIG.geometry.frontDistance=1.07`、`sideDistance=1.52`。単位m |
+| 壁の幅・高さ・側壁の奥行き | `frontWidth=3.04`、`wallHeight=2.5`、`sideDepth=2.14`。接続には `frontWidth=2*sideDistance` が必要 |
+| 三角形の寸法・個数 | `pattern.triangleSidesM=[.034,.034,.030]`、`countPerWall=500` |
+| 配置・中央空白・注視点 | `pattern.seed`、`centralBlankRadius=.30`、`fixationPoint=false` |
+| 将来の図形変更 | `pattern.type='polygon'` と `verticesM`（非退化の凸多角形）。生成入口は `kiemel-environment.js` の `shape()` |
+| 身体寸法と回転中心 | PCのKiemel専用入力欄。mに変換した `body.ankleHeight` / `hipHeight` / `eyeHeight` |
+| 条件 | `motion.type`: `translation` / `ankle` / `hip`。PCで選択可能 |
+| 共通振幅 | `motion.amplitudeDegHz=.02`、`amplitudeScale=1`。3条件の独立振幅は設けない |
+| 周波数 | `frequencyNumerators` / `frequencyDenominator`。第8成分以降の振幅は `capAfter` に従う |
+| 時間 | `preSeconds=5`、`duration=250`、`postSeconds=5`。短縮ボタンは125秒の刺激 |
+| 波形・座標変換 | `kiemel-motion.js`（純粋計算）。実際の環境全体への適用は `quest-runtime.js` の `applyKiemel()` |
+| 表示と配置検査 | `kiemel-environment.js`。3壁と固定図形を一度生成して再利用 |
+
+編集例は `kiemel-config.js` の `CONFIG` 直下にコメントで示しています。`referencePreset` は凍結され、`KiemelConfig.restore()` はその新しいコピーを返します。PCの「Kiemel基準設定へ復元」は幾何・図形・運動・時間を基準に戻し、被験者の入力欄は維持します。編集後はPC・Quest双方を再読み込みし、身体寸法変更時は再校正してください。
+
+### 幾何・校正
+
+校正時の左右眼ビューのワールド位置の平均を眼基準原点Oとして固定します。ステレオの行列が取得できない場合はXRカメラ位置を使い、その方式をログに記録します。時間方向の平均化はしていません。校正後は頭の動きに合わせてOや壁位置を更新せず、Questの頭部追跡と各眼の描画を維持します。前方は−Z、右は+X、上は+Y。校正時は正面（アプリの−Z）を向いてください。視線方向への自動ヨー位置合わせは追加していません。
+
+| 壁 | 眼基準の中心[m] | 面の向き | 初期寸法[m] |
+| --- | --- | --- | --- |
+| 正面 | `(0,0,-1.07)` | XY面 | 幅3.04、高さ2.5 |
+| 左 | `(-1.52,0,0)` | YZ面 | 奥行き2.14、高さ2.5 |
+| 右 | `(+1.52,0,0)` | YZ面 | 奥行き2.14、高さ2.5 |
+
+側壁はZ=−1.07から+1.07まで続き、正面の左右端と一致します。上下は眼基準のY=±1.25です。**高さ2.5 m、奥行き2.14 m、上下を眼の周りに対称に置くことは実装上の仮設定で、原論文の測定値とは主張しません。** 距離1.07 m／1.52 mとは別の値です。頂点データはmで作成し、描画バッファのFloat32精度に伴う微小な丸めはあります。
+
+黒い壁に白い三角形を各500個。辺長はテクスチャの見かけのピクセル数ではなくメートルの頂点から構成します。全頂点が壁内にあり、図形同士が重ならず、正面の円形空白に辺・内部を含めて侵入しないことを確認して採用します。収容できない指定はエラーとし、個数や寸法を自動で減らしません。壁と図形は同じ幾何平面上で、黒背景材質の深度オフセットによりz-fightingを避けます。白い図形自体を前方へ移す補正はありません。
+
+乱数シードは12345。条件・被験者寸法・注視点ON/OFFの変更では配置を変えません。配置条件（壁寸法・図形寸法・個数・seed等）が変わったときだけ再生成します。指紋は非暗号学的な配置識別値です。注視点は初期OFF。ON時の直径5 mmは便宜的な設定で論文値ではありません。
+
+入力は眼・股関節・足関節の実測高さ（cm）。`0≤足関節<股関節<眼` を検証し、推測値を補いません。`l1=hipHeight-ankleHeight`、`l2=eyeHeight-hipHeight`、`H=l1+l2`。眼の入力値とQuestが追跡する床上高さの差も表示・記録します。身体寸法が変わるとSTARTを拒否して再校正を要求します。
+
+### 波形と変換
+
+`f=[3,7,13,23,43,73,113,179,263,367]/125 Hz`、`A=.02 deg*Hz`。
+
+```text
+v_a(t) = amplitudeScale * Σ(j=1..10) (-1)^j * A_j * sin(2π f_j t)
+A_j = A/f_j (j≤8), A/f_8 (j=9,10)
+theta_a = π/180 * v_a(t)
+theta_h = H/l2 * theta_a
+d_translation = H * theta_a [m]
+```
+
+正のX軸回転と+Z（後方）変位を正に統一します。前方は負です。環境の点Pに対する眼基準の変換：
+
+```text
+Ankle:     C_a=(0,-H,0),  P'=C_a+Rx(theta_a)*(P-C_a)
+Hip:       C_h=(0,-l2,0), P'=C_h+Rx(theta_h)*(P-C_h)
+Translation:             P'=P+(0,0,d_translation), rotation=0
+Questワールド座標:       O+P'
+```
+
+三角形ごとの回転ではなく、3壁と全図形を一体の環境として変換します。条件変更時の静止姿勢はすべて同じです。回転中心のワールド座標もログに保存します。
+
+線形近似での眼位置相当変位はすべて `H*theta_a` です。厳密な変位は `H*sin(theta_a)`、`l2*sin(theta_h)`、`H*theta_a` なので有限角では等しくありません。指定式を変えて無理に一致させることはしていません。誤差はそれぞれ `H*|theta_a|³/6`、`l2*|theta_h|³/6` 以下で、身体寸法・共通倍率によって変わります。保守的な上界も `motionSettings.approximationBounds` に記録します。
+
+### 時間・停止・操作
+
+START受信・準備完了時の `performance.now()` をt=0とし、`[0,5)` は静止、`[5,255)` に `v_a(t-5)` を適用、`[255,260)` は静止、その後終了します。フレーム数で波形の時間を進めません。Kiemelには従来の3秒待機・1.5秒ランプ・角速度制限を適用しません。既存モードの処理は維持します。
+
+任意の短縮時間で切り捨てて終端角を0へ跳ばすことは避け、終端波形が0でない指定を拒否します。初期の共通周期は125秒なので、短縮ボタンは5＋125＋5=135秒です。周波数を速めて短縮する実装ではありません。通常STOP時だけ2秒で静止姿勢へ復帰し、緊急STOP・VR終了・非表示・切断等では停止します。STOPによる復帰部分は原波形とは別で、`returning` と記録します。Baselineは同じ環境・時間設定で静止、元のBaseline操作も維持します。
+
+PCで「Kiemel」を選択 → 身体寸法入力 → Quest標準VRボタン → 位置合わせ → 3条件のいずれかを選択 → START → 終了またはSTOP。身体寸法と共通倍率をそろえて比較してください。Kiemel専用欄を使い、既存のTrapV／sin欄の角度・周波数・再生時間は使いません。PCプレビューはFirebaseの認証・状態・ログを書き換えず、同期精度や実機描画を保証するものではありません。
+
+### ログ・検証結果・残る相違点
+
+Kiemelログは `kiemel`（全設定）、`kiemelCalibration`（眼原点・身体寸法等）、`patternSettings`（個数・seed・配置指紋）、`layoutSettings`（3壁の中心・基底・寸法）、`motionSettings`（軸・中心・誤差上界）、`timingSummary` を保存します。サンプル列は `sampleColumns` に定義し、角度[deg]・環境のZ平行移動[m]・足関節基準角・眼位置相当の線形／厳密変位・phaseを分けます。回転時の環境の剛体並進成分と、Translation条件の `translation_z_m` は別概念です。後者は回転条件では0です。CSVは旧ログと新ログの列を名前で統合し、不足列を空欄にします。
+
+`node tests/kiemel_checks.js` は1500個すべての境界・中央空白・非重複と三角形の辺長、壁の距離・接続、乱数再現性、周波数・符号・単位・回転中心・時間境界を検証します。テスト身体寸法は眼1.60 m・股関節0.90 m・足関節0.08 m（実被験者値ではない）。0～250秒を1/240秒間隔、60,001点で調べた結果：
+
+| 検証 | 結果 |
+| --- | --- |
+| 線形近似の3条件の最大差 | 0 m |
+| 厳密な足関節回転とTranslationの最大差 | 約0.002899 mm |
+| 厳密な股関節回転とTranslationの最大差 | 約0.013667 mm |
+| Translationの回転角 | 常に0 |
+| 各回転中心 | 変換で不変 |
+| 60/72/90/120 Hz相当の同一時刻 | 同じ波形値 |
+
+`node tests/runtime_checks.js` は本番の指令・tickを模擬DOM/XRで実行し、3変換、眼原点の固定、同一配置、260秒の区間、STOP／緊急停止／Baseline、身体変更拒否とログを確認します。`node tests/operator_checks.js` は単位変換・条件送信・共通倍率・復元・短縮・混在CSVを検証します。これらNode検証はGPU／Quest実測ではありません。
+
+`tests/kiemel_browser_checks.py` は既存のA-Frame 1.7.0バンドルを使い、ヘッドレスChromium（ソフトウェアWebGL）の黒白描画、1,500三角形、標準VRボタン、実シーンの三条件の変換、PCプレビューと指令送信を確認します。XR状態とFirebaseは模擬境界です。Quest実機・実Firebase通信・光の提示時刻は検証しません。
+
+提示仕様と合わせた項目：眼からの距離、3壁の直角・接続、図形個数・辺長・黒白・空白、指定波形と条件間換算、初期5＋250＋5秒。論文未確認／移植差：壁の縦横寸法・上下配置・seed・注視点サイズ、原装置とQuestの視野・光学系・立体描画・遅延・リフレッシュ周波数、校正手順。原装置60 Hzという提示条件に対し、Questの周波数を60 Hzに固定していません。XR公称値が取得できれば保存し、実際のアプリのサンプル間隔・平均Hz・最大間隔も記録します。光の提示時刻や床反力計／IMUとの同期を測定したログではありません。
+
 ## Local development and validation
 
 No production package installation or build is required. Serve the checkout with Python 3:
