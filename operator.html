@@ -11,12 +11,12 @@
 <section id="login"><h2>1. 実験者ログイン</h2><label>Firebase Auth のメール</label><input id="email" type="email" autocomplete="username"><label>パスワード</label><input id="password" type="password" autocomplete="current-password"><p><button id="signIn" class="primary">ログイン</button></p><div id="authState"></div></section>
 <section id="control" style="display:none"><h2>2. 刺激設定と操作</h2><p>Questの状態：<span id="state">確認中</span></p>
 <p id="questDiagnostics" class="muted"></p>
-<h3>Questで提示する刺激のプレビュー</h3><iframe id="preview" title="VR刺激プレビュー"></iframe><p class="muted">正面から見た同じVR空間です。Questの頭の向き・実際の表示タイミングは一致しません。</p><p><b>室内版・XR状態確認対応</b></p><label>身長（cm・記録用）</label><input id="heightCm" type="number" value="160" min="100" max="220"><label>目の高さ（床からcm・PCプレビュー用）</label><input id="eyeCm" type="number" value="150" min="80" max="210"><label>足首の回転軸の高さ（床からcm）</label><input id="ankleCm" type="number" step="0.1" value="8.8" min="0" max="20"><p><button id="calibrate">立ち位置を合わせる</button></p><p class="muted">QuestでVRに入り、実験位置で直立して正面を向いた状態で押してください。足首の前後・左右位置は頭の真下で近似します。</p><p id="measuredEye">Quest目高: 未取得</p><button id="estimateAnkle">身長×0.039で足首高さを仮推定</button>
+<h3>Questで提示する刺激のプレビュー</h3><iframe id="preview" title="VR刺激プレビュー"></iframe><p class="muted">正面から見た同じVR空間です。Questの頭の向き・実際の表示タイミングは一致しません。</p><p><b>Kiemel初期表示・XR状態確認対応</b></p><fieldset id="legacyBody" hidden><legend>単一sin・既存画像の位置合わせ</legend><label>身長（cm・記録用）</label><input id="heightCm" type="number" value="160" min="100" max="220"><label>目の高さ（床からcm・PCプレビュー用）</label><input id="eyeCm" type="number" value="150" min="80" max="210"><label>足首の回転軸の高さ（床からcm）</label><input id="ankleCm" type="number" step="0.1" value="8.8" min="0" max="20"></fieldset><p><button id="calibrate">立ち位置を合わせる</button></p><p class="muted">QuestでVRに入り、実験位置で直立して正面を向いた状態で押してください。足首の前後・左右位置は頭の真下で近似します。</p><p id="measuredEye">Quest目高: 未取得</p><button id="estimateAnkle">身長×0.039で足首高さを仮推定</button>
 <label>映像パターン（運動条件は共通）</label><select id="pattern"></select>
 <p><button id="applyPattern">選択した映像をQuestへ反映（VR開始前も可）</button></p>
 <p id="patternDescription" class="muted"></p><p class="muted">模様は停止中に変更してください。比較時は振幅・周波数・時間・位置合わせをそろえます。コントラスト値はソフトウェア上の設定で、Questの実測輝度を保証するものではありません。</p>
-<label>刺激</label><select id="mode"><option value="trapv" selected>TrapV型（速度が台形・代替仕様）</option><option value="sine">sin（正弦波）</option><option value="kiemel">Kiemel：3条件共通の多周波刺激</option></select>
-<fieldset id="kiemelControls" hidden><legend>Kiemel設定（眼の基準位置は校正後に固定）</legend>
+<label>刺激</label><select id="mode"><option value="sine">sin（正弦波）</option><option value="kiemel" selected>Kiemel：3条件共通の多周波刺激</option></select>
+<fieldset id="kiemelControls"><legend>Kiemel設定（眼の基準位置は校正後に固定）</legend>
 <label>運動条件</label><select id="kiemelCondition"><option value="ankle">Ankle rotation</option><option value="hip">Hip rotation</option><option value="translation">Translation</option></select>
 <label>眼の高さ・実測（cm）</label><input id="kiemelEye" type="number" step="0.1" placeholder="必須・推定値なし">
 <label>股関節の高さ・実測（cm）</label><input id="kiemelHip" type="number" step="0.1" placeholder="必須・推定値なし">
@@ -27,24 +27,20 @@
 <label>最後の静止（秒）</label><input id="kiemelPost" type="number" min="0" value="5">
 <p><button id="kiemelShort">短縮試験：125秒</button> <button id="kiemelRestore">Kiemel基準設定へ復元</button></p>
 <label><input id="kiemelFixation" type="checkbox" style="width:auto">中央注視点を表示（初期OFF）</label>
-<p class="muted">正面1.07 m／左右1.52 mは眼からの距離。高さ2.5 m・側壁奥行き2.14 mは仮寸法です。入力した身体寸法を変更したら再度位置合わせをしてください。+Z（後方）の眼位置相当変位を正とします。Questの頭部追跡は維持します。</p><p class="muted">Kiemelではこの枠内の設定を使用します。下にあるTrapV・sinの振幅／周波数／再生時間は使用しません。</p></fieldset>
-<label>TrapV最大速度 (°/s)</label><input id="velocity" type="number" value="2" min="0.1" max="30" step="0.1">
-<label>TrapV加速・減速時間 (秒)</label><input id="ramp" type="number" value="0.5" min="0.05" step="0.05">
-<label>TrapV端点保持時間 (秒)</label><input id="hold" type="number" value="1" min="0" max="30" step="0.1">
-<p class="muted">0→A→0を反復。角度の台形ではなく速度が0→V→V→0となります。V×加速時間≤A。</p>
-<label>正弦波の周波数 (Hz)</label><input id="freq" type="number" min="0.01" max="2" step="0.01" value="0.2">
-<label>角度 A (度・TrapVは0～A、正弦波は±A)</label><input id="amp" type="number" min="0" max="20" step="0.5" value="5">
+<p class="muted">正面1.07 m／左右1.52 mは眼からの距離。高さ2.5 m・側壁奥行き2.14 mは仮寸法です。入力した身体寸法を変更したら再度位置合わせをしてください。+Z（後方）の眼位置相当変位を正とします。Questの頭部追跡は維持します。</p><p class="muted">Kiemelではこの枠内の設定を使用します。下にあるsinの振幅／周波数／再生時間は使用しません。</p></fieldset>
+<fieldset id="legacyControls" hidden><legend>単一正弦波の設定（Kiemelでは使用しません）</legend><label>正弦波の周波数 (Hz)</label><input id="freq" type="number" min="0.01" max="2" step="0.01" value="0.2">
+<label>角度 A (度・正弦波は±A)</label><input id="amp" type="number" min="0" max="20" step="0.5" value="5">
 <label>再生時間 (秒)</label><input id="duration" type="number" min="5" max="600" step="5" value="60">
-<canvas id="waveform" width="640" height="160" style="width:100%;background:#f5f5f5"></canvas><p id="waveError"></p>
+</fieldset><canvas id="waveform" width="640" height="160" style="width:100%;background:#f5f5f5"></canvas><p id="waveError"></p>
 <div class="controls"><button id="start" class="primary">START（3秒後開始）</button><button id="stop" class="danger">STOP（2秒でBaselineへ）</button></div>
 <p><button id="emergency" class="danger">緊急停止（即時0°）</button> <button id="retry">接続再試行（PC再読込）</button> <span id="pcConnection"></span></p><p><button id="baseline">Baseline開始</button> <button id="csvDownload">ログCSV出力</button></p><p id="log" class="action-feedback" role="status" aria-live="polite">STARTで開始、STOPで停止します。</p><p><button id="download">Questが保存した刺激ログを取得（JSON）</button></p>
 </section>
-<script src="stimulus-engine.js?v=20261014-gridfix2"></script>
-<script src="pattern-config.js?v=20261021-kiemel1"></script>
+<script src="stimulus-engine.js?v=20261021-kiemel2"></script>
+<script src="pattern-config.js?v=20261021-kiemel2"></script>
 <script src="layout-config.js?v=20261020-layout2"></script>
 <script src="motion-config.js?v=20261020-layout2"></script>
 <script src="stimulus-patterns.js?v=20261020-layout2"></script>
-<script src="kiemel-config.js?v=20261021-kiemel1"></script>
-<script src="kiemel-motion.js?v=20261021-kiemel1"></script>
-<script src="operator.js?v=20261021-kiemel1"></script>
+<script src="kiemel-config.js?v=20261021-kiemel2"></script>
+<script src="kiemel-motion.js?v=20261021-kiemel2"></script>
+<script src="operator.js?v=20261021-kiemel2"></script>
 </body></html>

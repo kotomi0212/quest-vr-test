@@ -1,10 +1,16 @@
 # Quest remote visual stimulus pilot
 
+現在の初期表示はPC・QuestともKiemel（黒背景・白三角形3面）です。TrapVは選択肢・設定欄・再生処理から削除しました。単一sin・Baseline・CSV・既存画像の機能は残しています。旧TrapVコマンドは受け付けません。
+
+START後は最初の5秒が静止です。その後10個の正弦波の和で動きます。元の±5°単一sinより小さい波形で、開始直後は微小な動きです。見やすくするための増幅はしていません。PCには経過秒・phase・適用角度・描画フレーム数を表示します。数値が進むか、画像も動くかを分けて確認してください。実機で動かなかった原因は未確定です。通常のA-Frame描画ループを使うブラウザ検証を追加しています。
+
+
+
 ## 2026-10-14 update
 
-`gridfix1`: Fixed the production animation loop (TrapV dispatch and an undefined log variable), changed the semicylinder to thin black grid lines on white, and added a white surround. Operator selectors now offer TrapV/sin and grid/room, with a separate Baseline button. Run `node tests/runtime_checks.js` and `node tests/operator_checks.js` as well as the math checks. These execute the actual runtime/operator scripts with simulated DOM/XR/GPU/Firebase boundaries without opening a browser.
+`gridfix1`: Fixed the production animation loop (TrapV dispatch and an undefined log variable), changed the semicylinder to thin black grid lines on white, and added a white surround. Historical operator selectors offered TrapV/sin and grid/room, with a separate Baseline button. Run `node tests/runtime_checks.js` and `node tests/operator_checks.js` as well as the math checks. These execute the actual runtime/operator scripts with simulated DOM/XR/GPU/Firebase boundaries without opening a browser.
 
-See [日本語の改修結果・操作手順・検証限界](IMPLEMENTATION-ja.md) for the current behavior. The default operator stimulus is now a configurable TrapV-like velocity profile, with a high-contrast front semicylinder and the existing room available as scene options. These are alternatives, not verified reproductions of Ghiasi/Train. Normal STOP returns to zero over two seconds; the separate emergency button resets immediately. Stop before changing trial conditions. Run `node tests/stimulus_checks.js` for the dependency-free math/path checks. The older sections below describe the original implementation; current logging includes commanded and applied software angles and monotonic timestamps, but external sensor synchronization remains unimplemented.
+See [日本語の改修結果・操作手順・検証限界](IMPLEMENTATION-ja.md) for the current behavior. Historical implementation: the operator stimulus was a configurable TrapV-like velocity profile, with a high-contrast front semicylinder and the existing room available as scene options. These are alternatives, not verified reproductions of Ghiasi/Train. Normal STOP returns to zero over two seconds; the separate emergency button resets immediately. Stop before changing trial conditions. Run `node tests/stimulus_checks.js` for the dependency-free math/path checks. The older sections below describe the original implementation; current logging includes commanded and applied software angles and monotonic timestamps, but external sensor synchronization remains unimplemented.
 
 `operator.html` controls `quest.html` through Firebase Realtime Database. GitHub Pages publishes `main`. Use the existing URLs; the Quest URL needs no query string.
 
@@ -43,7 +49,7 @@ The furnished room is an approximation inspired by the modern room in Ghiasi Nou
 | 5. 表示する模様を切り替える | PCの「映像パターン」→「反映」。初期の選択肢は `patternConfig.defaultPattern`（選択後の反映が必要） |
 | 6. 回転軸・足関節／股関節の中心を指定する | `motion-config.js` の `motionConfig.rotationAxis` と `pivot`。実際の適用入口は `quest-runtime.js` の `rotationPivot()` / `rotate()` |
 
-波形（TrapV / sin / Baseline / 既存CSV）は `stimulus-engine.js`、運動の時間制御・開始終了ランプ・速度制限・STOPは `quest-runtime.js` の `stimulus-driver.tick()` です。これらは今回作り替えていません。設定ファイル編集後はPCとQuestを再読み込みしてください。キャッシュが残る場合はページのキャッシュも更新してください。
+旧波形（sin / Baseline / 既存CSV）は `stimulus-engine.js`、運動の時間制御・開始終了ランプ・速度制限・STOPは `quest-runtime.js` の `stimulus-driver.tick()` です。これらは今回作り替えていません。設定ファイル編集後はPCとQuestを再読み込みしてください。キャッシュが残る場合はページのキャッシュも更新してください。
 
 ### patternConfig：画像そのもの
 
@@ -119,7 +125,7 @@ python3 tests/pattern_browser_checks.py
 
 ## Kiemel 2011仕様の追加（feature/kiemel-2011）
 
-**原論文本文は外部取得・照合していません。以下はユーザーが提示したKiemel仕様に基づく実装です。** 数学・配置・指令処理はNodeで検証しました。ヘッドレスChromiumのWebGL描画、三条件の実シーン変換、PCプレビューと指令送信も検証しました。XRイベントとFirebaseは模擬しており、Quest実機のimmersive-vrと実通信は未検証です。既存の部屋、ノイズ、縞、TrapV、sin、Baselineは維持します。
+**原論文本文は外部取得・照合していません。以下はユーザーが提示したKiemel仕様に基づく実装です。** 数学・配置・指令処理はNodeで検証しました。ヘッドレスChromiumのWebGL描画、三条件の実シーン変換、PCプレビューと指令送信も検証しました。XRイベントとFirebaseは模擬しており、Quest実機のimmersive-vrと実通信は未検証です。既存の部屋、ノイズ、縞、sin、Baselineは維持します。TrapVは削除しました。
 
 ### ファイルと変更する値
 
@@ -190,7 +196,7 @@ START受信・準備完了時の `performance.now()` をt=0とし、`[0,5)` は�
 
 任意の短縮時間で切り捨てて終端角を0へ跳ばすことは避け、終端波形が0でない指定を拒否します。初期の共通周期は125秒なので、短縮ボタンは5＋125＋5=135秒です。周波数を速めて短縮する実装ではありません。通常STOP時だけ2秒で静止姿勢へ復帰し、緊急STOP・VR終了・非表示・切断等では停止します。STOPによる復帰部分は原波形とは別で、`returning` と記録します。Baselineは同じ環境・時間設定で静止、元のBaseline操作も維持します。
 
-PCで「Kiemel」を選択 → 身体寸法入力 → Quest標準VRボタン → 位置合わせ → 3条件のいずれかを選択 → START → 終了またはSTOP。身体寸法と共通倍率をそろえて比較してください。Kiemel専用欄を使い、既存のTrapV／sin欄の角度・周波数・再生時間は使いません。PCプレビューはFirebaseの認証・状態・ログを書き換えず、同期精度や実機描画を保証するものではありません。
+PCで「Kiemel」を選択 → 身体寸法入力 → Quest標準VRボタン → 位置合わせ → 3条件のいずれかを選択 → START → 終了またはSTOP。身体寸法と共通倍率をそろえて比較してください。Kiemel専用欄を使い、単一sin欄の角度・周波数・再生時間は使いません。PCプレビューはFirebaseの認証・状態・ログを書き換えず、同期精度や実機描画を保証するものではありません。
 
 ### ログ・検証結果・残る相違点
 

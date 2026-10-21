@@ -2,8 +2,8 @@
 (function (scope) {
   'use strict';
   const patternConfig = {
-    // PCの初期選択。noise-1f / stripes-high / stripes-low / grid / room
-    defaultPattern: 'grid',
+    // PC・Questの初期選択。kiemel-triangles / noise-1f / stripes-high / stripes-low / grid / room
+    defaultPattern: 'kiemel-triangles',
     patterns: {
       'kiemel-triangles': { label: 'Kiemel：黒背景・白三角形の3面', kind: 'kiemel' },
       'noise-1f': {

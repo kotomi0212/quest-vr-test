@@ -43,7 +43,7 @@ const sandbox={window,document,AFRAME:{THREE,registerComponent:(name,c)=>{tick=c
   performance:{now:()=>now,timeOrigin:100000},Date,console,setTimeout:()=>1,clearTimeout(){},setInterval(){},reportStartupError:e=>{throw Error(e);}};
 window.AFRAME=sandbox.AFRAME;
 vm.runInNewContext(fs.readFileSync(require('node:path').join(__dirname,'../quest-runtime.js'),'utf8'),sandbox);
-function command(type,extra={}){events.message({source:parent,origin:'http://test',data:{type:'stimulus-command',command:{type,seq:++seq,runId:'test-'+seq,durationSec:10,mode:'trapv',amplitudeDeg:5,velocityDegSec:2,rampSec:.5,holdSec:1,pattern:'grid',heightCm:160,eyeHeightM:1.5,ankleHeightM:.088,...extra}}});}
+function command(type,extra={}){events.message({source:parent,origin:'http://test',data:{type:'stimulus-command',command:{type,seq:++seq,runId:'test-'+seq,durationSec:10,mode:'sine',amplitudeDeg:5,velocityDegSec:2,rampSec:.5,holdSec:1,pattern:'grid',heightCm:160,eyeHeightM:1.5,ankleHeightM:.088,...extra}}});}
 async function flush(){await Promise.resolve();await Promise.resolve();}
 (async()=>{
  command('calibrate');await flush();
@@ -51,7 +51,7 @@ async function flush(){await Promise.resolve();await Promise.resolve();}
  assert.equal(contrast.mesh.geometry.args[0],1);
  assert.equal(drawing[0][0],'#fff');assert(drawing.slice(1).every(d=>d[0]==='#000'));
  assert.equal(drawing.length,95); // white fill + 33 vertical + 61 horizontal lines
- for(const mode of ['trapv','sine']) {
+ for(const mode of ['sine']) {
   command('start',{mode,frequencyHz:.2});await flush();
   now+=3001;tick();
   for(let i=0;i<150;i++){now+=10;tick();}
@@ -161,6 +161,6 @@ async function flush(){await Promise.resolve();await Promise.resolve();}
  const fixation=KC.clone(kcfg);fixation.pattern.fixationPoint=true;
  headset('configure',{pattern:'kiemel-triangles',kiemel:fixation});await flush();assert.equal(kiemel.mesh,fixedGroup);assert.equal(fixedGroup.userData.fixation.visible,true);assert.equal(fixture.lastStatus().patternSettings.fingerprint,fingerprint);
  headset('configure',{pattern:'room'});await flush();assert.equal(kiemel.object3D.visible,false);assert.equal(world.object3D.visible,true);
- console.log('PASS: production Quest ticks move TrapV/sin/legacy CSV, smooth STOP, emergency STOP, grid mesh/white surround, idle scene switching');
+ console.log('PASS: production Quest ticks move sin/legacy CSV, smooth STOP, emergency STOP, grid mesh/white surround, idle scene switching');
  console.log('PASS: production Kiemel calibration/3 transforms/260s timeline/fixed pattern/STOP/Baseline/body-change rejection/logs');
 })().catch(e=>{console.error(e);process.exitCode=1;});

@@ -35,6 +35,24 @@ class KiemelBrowserChecks(browser_checks.BrowserChecks):
         self.assertFalse(result['fixation'])
         self.assertEqual(self.errors, [])
 
+    def test_kiemel_default_and_automatic_animation_loop(self):
+        self.quest()
+        self.assertEqual(self.status()['pattern'], 'kiemel-triangles')
+        self.assertEqual(self.status()['patternSettings']['totalCount'],1500)
+        self.xr()
+        config=self.config()
+        self.command('calibrate',protocol='kiemel',pattern='kiemel-triangles',kiemel=config)
+        self.command('start',protocol='kiemel',mode='kiemel',pattern='kiemel-triangles',kiemel=config)
+        self.assertEqual(self.status()['status'],'pre-static')
+        # Real elapsed time and unmodified A-Frame render loop: no manual tick/time jump.
+        self.page.wait_for_function("Math.abs(document.querySelector('#kiemel-environment').object3D.rotation.x)>0.003",timeout=15000)
+        self.page.wait_for_function("fixture.lastStatus().renderedFrames>50 && fixture.lastStatus().kiemelPhase==='stimulus'",timeout=8000)
+        self.assertGreater(self.status()['elapsedSeconds'],5)
+        self.assertTrue(self.page.evaluate("document.querySelector('#kiemel-environment').object3D.visible"))
+        self.command('emergency')
+        self.assertEqual(self.page.evaluate("document.querySelector('#kiemel-environment').object3D.rotation.x"),0)
+        self.assertEqual(self.errors,[])
+
     def test_kiemel_three_real_scene_transforms(self):
         self.quest(); self.xr()
         config=self.config()
@@ -68,7 +86,10 @@ class KiemelBrowserChecks(browser_checks.BrowserChecks):
     def test_kiemel_operator_preview_and_protocol(self):
         self.page.goto(self.base+'/operator.html')
         self.page.wait_for_function("document.querySelector('#preview').contentWindow.document.querySelector('a-scene')?.renderStarted")
-        self.page.locator('#mode').select_option('kiemel')
+        self.assertEqual(self.page.locator('#mode').input_value(),'kiemel')
+        self.assertEqual(self.page.locator('#pattern').input_value(),'kiemel-triangles')
+        self.assertEqual(self.page.locator('#mode option[value=trapv]').count(),0)
+        self.assertTrue(self.page.locator('#kiemelControls').is_visible())
         preview=self.page.frames[1]
         preview.wait_for_function("!!document.querySelector('#kiemel-environment').getObject3D('mesh')")
         self.assertEqual(preview.evaluate('typeof firebase'), 'undefined')

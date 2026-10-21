@@ -15,7 +15,7 @@
   let xrSupport = '確認中', firebaseState = preview ? 'プレビュー（接続なし）' : '準備中';
   const pivot = new THREE.Vector3(0, 0.088, 0); // 校正原点。motionConfigの固定中心とは独立。
   const patternTextures = new Map();
-  let selectedPattern = 'room';
+  let selectedPattern = StimulusPatterns.defaultPattern;
   let kiemelConfig=KiemelConfig.clone(KiemelConfig.CONFIG), kiemelModel=null, originInitialized=false;
   const kiemelOrigin=new THREE.Vector3(), kiemelAxis=new THREE.Vector3(1,0,0), kiemelCache=new Map();
   function trackedEyeCenter(target) {
@@ -115,7 +115,7 @@
       aframeVR: scene.is('vr-mode'), client: navigator.userAgent || 'unknown',
       pattern: selectedPattern, patternSettings: patternSettings(), layoutSettings:layoutSettings(), motionSettings:motionSettings(),
       translationZ:active?.lastPose?.translationZ||0,kiemelPhase:active?.lastPose?.phase||null,kiemelCondition:selectedPattern==='kiemel-triangles'?(active?.kiemel||kiemelConfig).motion.type:null,
-      appliedAngleDeg: active?.actualAngle || 0, startupError: window.vrLastError || '' };
+      elapsedSeconds:active?(performance.now()-active.startedPerf)/1000:0,renderedFrames:active?.samples.length||0,appliedAngleDeg: active?.actualAngle || 0, startupError: window.vrLastError || '' };
   }
   function updateDiagnostics() {
     const d = diagnostics();
@@ -307,14 +307,13 @@
       resetKiemel();ack('pre-static',{runId:c.runId});return;
     }
     if(c.mode==='kiemel'||c.pattern==='kiemel-triangles'){block('Kiemelのプロトコル指令が必要です');return;}
-    if (!['baseline', 'sine', 'csv', 'trapv'].includes(c.mode) || !Number.isFinite(c.durationSec) || c.durationSec < 5 || c.durationSec > 600 ||
+    if (!['baseline', 'sine', 'csv'].includes(c.mode) || !Number.isFinite(c.durationSec) || c.durationSec < 5 || c.durationSec > 600 ||
       !/^[A-Za-z0-9_-]{1,100}$/.test(c.runId || '') ||
       (c.mode === 'sine' && (!Number.isFinite(c.frequencyHz) || c.frequencyHz <= 0 || c.frequencyHz > 2 ||
         !Number.isFinite(c.amplitudeDeg) || c.amplitudeDeg < 0 || c.amplitudeDeg > 20))) {
       block('刺激設定が不正です'); return;
     }
     if (active || pending) { block('STOP後に次の条件を開始してください'); return; }
-    if (c.mode === 'trapv') { try { Stimulus.trap(c); } catch(e) { block(e.message); return; } }
     if (c.mode === 'sine' && 2*Math.PI*c.frequencyHz*c.amplitudeDeg > Stimulus.limits.velocity) { block('角速度上限30°/sを超えます'); return; }
     if (c.pattern && !StimulusPatterns.get(c.pattern)) { block('映像パターン不正'); return; }
     finish('replaced');
@@ -386,9 +385,10 @@
   }
   scene.addEventListener('enter-vr', syncXR);
   scene.addEventListener('exit-vr', () => { calibrated = preview; finish('vr-exited'); syncXR(); });
-  scene.addEventListener('loaded', () => { show('室内読込完了。右下の標準VRボタンで開始してください'); updateDiagnostics(); });
+  scene.addEventListener('loaded', () => { show('Kiemel読込完了。右下の標準VRボタンで開始してください'); updateDiagnostics(); });
   scene.addEventListener('renderstart', () => {
     clearTimeout(startupTimer); document.querySelector('#startup-error').hidden = true;
+    selectPattern(StimulusPatterns.defaultPattern);
     scene.renderer.xr.addEventListener('sessionstart', syncXR);
     scene.renderer.xr.addEventListener('sessionend', () => { calibrated = preview; finish('vr-exited'); syncXR(); });
     scene.canvas.addEventListener('webglcontextlost', () => {
@@ -412,7 +412,7 @@
   }).catch(error => { xrSupport = error.message; updateDiagnostics(); });
   // Poll state even when XR events or a paused render loop arrive in another order.
   setInterval(() => { syncXR(); updateDiagnostics(); }, 250);
-  setInterval(() => ack(active ? (active.returning ? 'returning' : active.startedPerf === null ? 'countdown' : 'running') : pending ? 'loading' : ready() ? 'ready' : 'connected',
+  setInterval(() => ack(active ? (active.returning ? 'returning' : active.kiemel ? active.lastPose?.phase==='stimulus'?'running':active.lastPose?.phase||'pre-static' : active.startedPerf === null ? 'countdown' : 'running') : pending ? 'loading' : ready() ? 'ready' : 'connected',
     active ? { commandSeq: active.cmd.seq, runId: active.cmd.runId } : {}), 5000);
   async function loadScript(src) {
     await new Promise((resolve, reject) => {
