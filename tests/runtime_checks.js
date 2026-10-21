@@ -38,7 +38,7 @@ const THREE={Vector3,MathUtils:{degToRad:a=>a*Math.PI/180},DoubleSide:2,
   Mesh:class {constructor(geometry,material){Object.assign(this,{geometry,material,position:new Vector3(),rotation:{set(){}}});}}};
 const parent={postMessage(){}};
 const window={addEventListener:(name,fn)=>{events[name]=fn;},vrLastError:''};
-const sandbox={window,document,AFRAME:{THREE,registerComponent:(name,c)=>{tick=c.tick;}},Stimulus:S,StimulusPatterns:P,layoutConfig:L,motionConfig:M,KiemelConfig:KC,KiemelMotion:KM,KiemelEnvironment:KE,KiemelProjection:{create(T,model,p){const g=new T.Group();g.userData.projection={source:KE.build(T,model,p)};return g;},render(){}},crypto:require('node:crypto').webcrypto,
+const sandbox={window,document,AFRAME:{THREE,registerComponent:(name,c)=>{tick=c.tick;}},Stimulus:S,StimulusPatterns:P,layoutConfig:L,motionConfig:M,KiemelConfig:KC,KiemelMotion:KM,KiemelEnvironment:KE,KiemelProjection:{create(T,model,p){const g=new T.Group();g.userData.projection={source:KE.build(T,model,p)};return g;},request(){},renderPending(){}},crypto:require('node:crypto').webcrypto,
   URLSearchParams,location:{search:'?preview=1',origin:'http://test'},parent,isSecureContext:false,navigator:{},
   performance:{now:()=>now,timeOrigin:100000},Date,console,setTimeout:()=>1,clearTimeout(){},setInterval(){},reportStartupError:e=>{throw Error(e);}};
 window.AFRAME=sandbox.AFRAME;

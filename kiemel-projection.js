@@ -24,18 +24,28 @@
       screen.position.set(...w.center);screen.rotation.y=w.yaw;screens.add(screen);
       return {camera,target,screen};
     });
-    screens.userData.projection={source,views,scene,referenceEye:[0,0,0],resolution,viewport:new T.Vector4(),scissor:new T.Vector4()};
+    screens.userData.projection={source,views,scene,referenceEye:[0,0,0],resolution,clearColor:new T.Color(),dirty:true,updateCount:0};
     return screens;
+  }
+  // Pose updates only mark dirty. Render once, immediately before the main scene.
+  function request(screens){screens.userData.projection.dirty=true;}
+  function renderPending(renderer,screens){
+    if(screens?.userData.projection.dirty)render(renderer,screens);
   }
   function render(renderer,screens){
     const p=screens.userData.projection,oldTarget=renderer.getRenderTarget(),enabled=renderer.xr.enabled;
-    const viewport=renderer.getViewport(p.viewport),scissor=renderer.getScissor(p.scissor),scissorTest=renderer.getScissorTest(),autoClear=renderer.autoClear;
+    const cubeFace=renderer.getActiveCubeFace(),mipmap=renderer.getActiveMipmapLevel();
+    const autoClear=renderer.autoClear,alpha=renderer.getClearAlpha();renderer.getClearColor(p.clearColor);
     try{
-      renderer.xr.enabled=false;renderer.autoClear=true;renderer.setScissorTest(false);
+      renderer.xr.enabled=false;renderer.autoClear=true;
       for(const v of p.views){renderer.setRenderTarget(v.target);renderer.render(p.scene,v.camera);}
+      p.dirty=false;p.updateCount++;
     }finally{
-      renderer.setRenderTarget(oldTarget);renderer.setViewport(viewport);renderer.setScissor(scissor);renderer.setScissorTest(scissorTest);renderer.autoClear=autoClear;renderer.xr.enabled=enabled;
+      // setRenderTarget restores that target's physical viewport/scissor itself.
+      // getViewport() is the logical canvas viewport: never apply it to an XR target.
+      renderer.setRenderTarget(oldTarget,cubeFace,mipmap);
+      renderer.setClearColor(p.clearColor,alpha);renderer.autoClear=autoClear;renderer.xr.enabled=enabled;
     }
   }
-  const api={frustum,create,render};scope.KiemelProjection=api;if(typeof module!=='undefined')module.exports=api;
+  const api={frustum,create,request,renderPending,render};scope.KiemelProjection=api;if(typeof module!=='undefined')module.exports=api;
 })(globalThis);

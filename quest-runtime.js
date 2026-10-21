@@ -35,7 +35,7 @@
   }
   function resetKiemel() {
     const el=scene.querySelector('#kiemel-environment');
-    if(el) {el.object3D.setRotationFromAxisAngle(kiemelAxis,0);el.object3D.position.copy(kiemelOrigin);const source=el.getObject3D('mesh')?.userData.projection.source;if(source){source.position.set(0,0,0);source.rotation.set(0,0,0);KiemelProjection.render(scene.renderer,el.getObject3D('mesh'));}}
+    if(el) {el.object3D.setRotationFromAxisAngle(kiemelAxis,0);el.object3D.position.copy(kiemelOrigin);const source=el.getObject3D('mesh')?.userData.projection.source;if(source){source.position.set(0,0,0);source.rotation.set(0,0,0);KiemelProjection.request(el.getObject3D('mesh'));}}
   }
   function applyKiemel(pose) {
     const screens=scene.querySelector('#kiemel-environment').getObject3D('mesh'),world=screens.userData.projection.source;
@@ -43,7 +43,7 @@
     world.setRotationFromAxisAngle(kiemelAxis,angle);
     world.position.copy(center).sub(center.clone().applyAxisAngle(kiemelAxis,angle));
     world.position.set(world.position.x,world.position.y,world.position.z+pose.translationZ);
-    KiemelProjection.render(scene.renderer,screens);
+    KiemelProjection.request(screens);
   }
   function tickKiemel(now) {
     const elapsed=(now-active.startedPerf)/1000;
@@ -408,6 +408,13 @@
   const startupTimer = setTimeout(() => {
     if (!rendered()) { reportStartupError('3D空間の初期化が未完了です。' + window.vrLastError); ack('blocked', { error: window.vrLastError }); }
   }, 12000);
+  scene.addEventListener('loaded',()=>{
+    const beforeSceneRender=scene.object3D.onBeforeRender;
+    scene.object3D.onBeforeRender=function(renderer,...args){
+      beforeSceneRender?.call(this,renderer,...args);
+      if(selectedPattern==='kiemel-triangles')KiemelProjection.renderPending(renderer,scene.querySelector('#kiemel-environment').getObject3D('mesh'));
+    };
+  });
   document.body.appendChild(scene);
   if (!isSecureContext || !navigator.xr) xrSupport = '非対応（HTTPS・Quest Browserを確認）';
   else navigator.xr.isSessionSupported('immersive-vr').then(supported => {
