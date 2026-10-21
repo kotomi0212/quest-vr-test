@@ -29,18 +29,21 @@
   }
   function candidateKiemel(c,bodyRequired=false) {
     const cfg=KiemelConfig.clone(c.kiemel || KiemelConfig.CONFIG);
+    cfg.projection ||= KiemelConfig.clone(KiemelConfig.CONFIG.projection);
+    if(!Number.isInteger(cfg.projection.resolution)||cfg.projection.resolution<256||cfg.projection.resolution>2048)throw Error('投影解像度は256〜2048の整数が必要です');
     KiemelMotion.validate(cfg,bodyRequired);KiemelEnvironment.walls(cfg.geometry);return cfg;
   }
   function resetKiemel() {
     const el=scene.querySelector('#kiemel-environment');
-    if(el) {el.object3D.setRotationFromAxisAngle(kiemelAxis,0);el.object3D.position.copy(kiemelOrigin);}
+    if(el) {el.object3D.setRotationFromAxisAngle(kiemelAxis,0);el.object3D.position.copy(kiemelOrigin);const source=el.getObject3D('mesh')?.userData.projection.source;if(source){source.position.set(0,0,0);source.rotation.set(0,0,0);KiemelProjection.render(scene.renderer,el.getObject3D('mesh'));}}
   }
   function applyKiemel(pose) {
-    const world=scene.querySelector('#kiemel-environment').object3D;
-    const center=new THREE.Vector3(...pose.pivot),angle=KiemelMotion.rad(pose.angleDeg);
+    const screens=scene.querySelector('#kiemel-environment').getObject3D('mesh'),world=screens.userData.projection.source;
+    const center=new THREE.Vector3(...pose.pivot),angle=KiemelMotion.rad(pose.renderAngleDeg);
     world.setRotationFromAxisAngle(kiemelAxis,angle);
     world.position.copy(center).sub(center.clone().applyAxisAngle(kiemelAxis,angle));
-    world.position.set(world.position.x+kiemelOrigin.x,world.position.y+kiemelOrigin.y,world.position.z+kiemelOrigin.z+pose.translationZ);
+    world.position.set(world.position.x,world.position.y,world.position.z+pose.translationZ);
+    KiemelProjection.render(scene.renderer,screens);
   }
   function tickKiemel(now) {
     const elapsed=(now-active.startedPerf)/1000;
@@ -64,13 +67,13 @@
   function selectKiemel() {
     if(!originInitialized) {scene.camera?.getWorldPosition?.(kiemelOrigin);originInitialized=true;}
     const p=kiemelConfig.pattern, geometryPattern={...p};delete geometryPattern.fixationPoint;
-    const key=JSON.stringify([kiemelConfig.geometry,geometryPattern]);
+    const key=JSON.stringify([kiemelConfig.geometry,geometryPattern,kiemelConfig.projection]);
     if(!kiemelCache.has(key)) {
       const model=KiemelEnvironment.generate(kiemelConfig);
-      kiemelCache.set(key,{model,group:KiemelEnvironment.build(THREE,model,p)});
+      kiemelCache.set(key,{model,group:KiemelProjection.create(THREE,model,p,kiemelConfig.projection.resolution)});
     }
     const entry=kiemelCache.get(key);kiemelModel=entry.model;
-    entry.group.userData.fixation.visible=p.fixationPoint;
+    entry.group.userData.projection.source.userData.fixation.visible=p.fixationPoint;
     scene.querySelector('#kiemel-environment').setObject3D('mesh',entry.group);resetKiemel();
   }
   // 配置の原点と運動の回転中心は別。pivotは既存のキャリブレーション結果。
@@ -86,13 +89,13 @@
     return new THREE.Vector3(...values);
   }
   function layoutSettings() {
-    if(selectedPattern==='kiemel-triangles')return {profile:'Kiemel',geometry:KiemelConfig.clone(kiemelConfig.geometry),walls:kiemelModel?.walls.map(({id,width,height,center,u,v})=>({id,width,height,center,u,v}))||null,eyeOrigin:kiemelOrigin.toArray(),coordinateSystem:'fixed eye origin; +X right,+Y up,+Z posterior'};
+    if(selectedPattern==='kiemel-triangles')return {profile:'Kiemel',geometry:KiemelConfig.clone(kiemelConfig.geometry),walls:kiemelModel?.walls.map(({id,width,height,center,u,v})=>({id,width,height,center,u,v}))||null,eyeOrigin:kiemelOrigin.toArray(),projection:{method:'fixed-screen-offaxis',referenceEye:kiemelOrigin.toArray(),resolution:kiemelConfig.projection.resolution},coordinateSystem:'fixed eye origin; +X right,+Y up,+Z posterior; positive paper motion = forward (-Z)' };
     return { ...JSON.parse(JSON.stringify(layoutConfig)), anchorOriginM: layoutConfig.anchor === 'calibrated-xz' ? {x:pivot.x,y:0,z:pivot.z} : {x:0,y:0,z:0} };
   }
   function motionSettings() {
     if(selectedPattern==='kiemel-triangles') {
       let dimensions=null;try{dimensions=KiemelMotion.bodyDimensions(kiemelConfig.body);}catch{/* Static display may precede body entry. */}
-      return {profile:'Kiemel',...KiemelConfig.clone(kiemelConfig.motion),rotationAxis:[1,0,0],anklePivotLocal:dimensions?[0,-dimensions.H,0]:null,hipPivotLocal:dimensions?[0,-dimensions.l2,0]:null,
+      return {profile:'Kiemel',...KiemelConfig.clone(kiemelConfig.motion),rotationAxis:[1,0,0],renderAnglePerPaperAngle:-1,positiveDirection:'paper angle positive = forward (-Z); renderer Rx uses negative paper angle',anklePivotLocal:dimensions?[0,-dimensions.H,0]:null,hipPivotLocal:dimensions?[0,-dimensions.l2,0]:null,
         anklePivotWorld:dimensions?[kiemelOrigin.x,kiemelOrigin.y-dimensions.H,kiemelOrigin.z]:null,hipPivotWorld:dimensions?[kiemelOrigin.x,kiemelOrigin.y-dimensions.l2,kiemelOrigin.z]:null,approximationBounds:dimensions?KiemelMotion.bounds(kiemelConfig):null};
     }
     return { ...JSON.parse(JSON.stringify(motionConfig)), resolvedPivotM:rotationPivot().toArray(), normalizedAxis:motionAxis.toArray() };
@@ -197,7 +200,7 @@
     const trial = active;
     active = null; rotate(0);resetKiemel();
     if (!trial) return;
-    show('停止・終了 (' + reason + ') / 室内は静止表示');
+    show('停止・終了 (' + reason + ') / 刺激は静止表示');
     ack('idle', { lastRunId: trial.cmd.runId, reason });
     if (preview || !root || !user) return;
     const c = trial.cmd;

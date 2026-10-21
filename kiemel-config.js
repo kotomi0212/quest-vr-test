@@ -1,6 +1,6 @@
 /* Kiemel profile: units are metres, seconds, degrees, Hz. No inferred body sizes.
- * Paper text has NOT been independently checked: reference values below follow
- * the user's supplied specification. Wall size/depth are approved placeholders.
+ * Checked against supplied Kiemel et al. 2011 PDF, pp.239-240.
+ * Wall size/depth are approved placeholders, not paper measurements.
  */
 (function (scope) {
   'use strict';
@@ -18,6 +18,7 @@
       fixationPoint: false, fixationDiameter: 0.005, // Engineering choice; OFF by default.
       seed: 12345, maxPlacementAttempts: 100000
     },
+    projection: { resolution: 1024 }, // Quest engineering choice; not paper resolution.
     body: { ankleHeight: null, hipHeight: null, eyeHeight: null },
     motion: {
       type: 'ankle', amplitudeScale: 1,
