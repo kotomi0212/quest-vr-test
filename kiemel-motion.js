@@ -1,4 +1,4 @@
-/* Pure protocol math. +X rotation gives +Z (posterior) displacement at eye level.
+/* Pure protocol math. Positive paper angle is forward: -X rotation and -Z displacement in A-Frame.
  * No rendering, frame-count timing, rate limiter, fade or condition-specific gain.
  */
 (function (scope) {
@@ -37,9 +37,9 @@
     if (!['translation','ankle','hip'].includes(type)) throw Error('Kiemel条件が不正です');
     const angle=type==='translation'?0:type==='hip'?angleDeg*H/l2:angleDeg;
     const center=type==='hip'?[0,-l2,0]:[0,-H,0];
-    const translation=type==='translation'?H*theta:0;
-    return { angleDeg:angle, pivot:center, translationZ:translation, ankleReferenceDeg:angleDeg,
-      eyeLinearZ:H*theta, eyeExactZ:type==='translation'?translation:(type==='hip'?l2:H)*Math.sin(rad(angle)) };
+    const translation=type==='translation'?-H*theta:0;
+    return { angleDeg:angle, renderAngleDeg:(-angle||0), pivot:center, translationZ:translation, ankleReferenceDeg:angleDeg,
+      eyeLinearZ:-H*theta, eyeExactZ:type==='translation'?translation:-(type==='hip'?l2:H)*Math.sin(rad(angle)) };
   }
   function at(elapsed,config,baseline=false) {
     const m=config.motion, end=m.preSeconds+m.duration, total=end+m.postSeconds;
@@ -50,7 +50,7 @@
   }
   function rotateX(p,angleDeg) { const a=rad(angleDeg),c=Math.cos(a),s=Math.sin(a);return [p[0],c*p[1]-s*p[2],s*p[1]+c*p[2]]; }
   function transform(p,pose) {
-    const c=pose.pivot, r=rotateX(p.map((v,i)=>v-c[i]),pose.angleDeg);
+    const c=pose.pivot, r=rotateX(p.map((v,i)=>v-c[i]),pose.renderAngleDeg);
     return r.map((v,i)=>v+c[i]+(i===2?pose.translationZ:0));
   }
   function bounds(config) {

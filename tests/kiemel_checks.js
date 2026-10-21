@@ -48,7 +48,7 @@ for(let i=0;i<=60000;i++) {
   near(tr.angleDeg,0);near(h.angleDeg,degree*H/l2);
   const ea=M.transform([0,0,0],a),eh=M.transform([0,0,0],h),et=M.transform([0,0,0],tr);
   near(ea[2],a.eyeExactZ);near(eh[2],h.eyeExactZ);near(et[2],tr.translationZ);
-  if(degree!==0){assert(Math.sign(ea[2])===Math.sign(degree));assert(Math.sign(eh[2])===Math.sign(degree));}
+  if(degree!==0){assert(Math.sign(ea[2])===-Math.sign(degree));assert(Math.sign(eh[2])===-Math.sign(degree));}
   const ba=H*Math.abs(M.rad(degree))**3/6,bh=l2*Math.abs(M.rad(h.angleDeg))**3/6;
   assert(Math.abs(ea[2]-et[2])<=ba+1e-12);assert(Math.abs(eh[2]-et[2])<=bh+1e-12);
   ankleExactError=Math.max(ankleExactError,Math.abs(ea[2]-et[2]));hipExactError=Math.max(hipExactError,Math.abs(eh[2]-et[2]));
@@ -65,3 +65,13 @@ const scaled=C.clone(config);scaled.motion.amplitudeScale=.5;near(M.ankleAngle(1
 const edited=C.restore();edited.geometry.wallHeight=99;assert.equal(C.restore().geometry.wallHeight,2.5);
 console.log('PASS: 1500 fixed nonoverlapping metric triangles, empty central disk, 3-wall distance/joins, waveform/units/sign/pivots/timeline/frame-rate independence');
 console.log(JSON.stringify({testBodyM:config.body,samples:60001,maxLinearDifferenceM:linearError,maxAnkleExactVsTranslationMm:ankleExactError*1000,maxHipExactVsTranslationMm:hipExactError*1000,patternFingerprint:model.fingerprint}));
+
+// Independent off-axis projection: every screen corner maps exactly to NDC ±1.
+const projection=require('../kiemel-projection.js');
+for(const w of wall){const f=projection.frustum(w);for(const x of [-w.width/2,w.width/2])for(const y of [-w.height/2,w.height/2]){
+ const q=E.point(w,[x,y]),dot=(a,b)=>a.reduce((s,v,i)=>s+v*b[i],0),d=-dot(q,f.normal);
+ const ndcX=(2*f.near*dot(q,w.u)/d-(f.right+f.left))/(f.right-f.left);
+ const ndcY=(2*f.near*dot(q,w.v)/d-(f.top+f.bottom))/(f.top-f.bottom);near(ndcX,Math.sign(x));near(ndcY,Math.sign(y));
+}}
+for(const condition of ['ankle','hip','translation']){const p=M.pose(1,config.body,condition);assert(p.eyeLinearZ<0);assert(p.eyeExactZ<0);if(condition!=='translation')assert(p.renderAngleDeg<0);}
+console.log('PASS: off-axis screen corners and paper positive = forward (-Z) in all conditions');

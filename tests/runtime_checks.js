@@ -33,12 +33,12 @@ const THREE={Vector3,MathUtils:{degToRad:a=>a*Math.PI/180},DoubleSide:2,
   CircleGeometry:class {constructor(...args){this.args=args;}dispose(){}},
   BufferGeometry:class {constructor(){this.attributes={};}setAttribute(k,v){this.attributes[k]=v;}},
   Float32BufferAttribute:class {constructor(array,itemSize){this.array=new Float32Array(array);this.itemSize=itemSize;}},
-  Group:class {constructor(){this.children=[];this.userData={};}add(child){this.children.push(child);}},
+  Group:class {constructor(){Object.assign(this,element().object3D);this.children=[];this.userData={};}add(child){this.children.push(child);}},
   MeshBasicMaterial:class {constructor(options){Object.assign(this,options);}dispose(){}},
   Mesh:class {constructor(geometry,material){Object.assign(this,{geometry,material,position:new Vector3(),rotation:{set(){}}});}}};
 const parent={postMessage(){}};
 const window={addEventListener:(name,fn)=>{events[name]=fn;},vrLastError:''};
-const sandbox={window,document,AFRAME:{THREE,registerComponent:(name,c)=>{tick=c.tick;}},Stimulus:S,StimulusPatterns:P,layoutConfig:L,motionConfig:M,KiemelConfig:KC,KiemelMotion:KM,KiemelEnvironment:KE,crypto:require('node:crypto').webcrypto,
+const sandbox={window,document,AFRAME:{THREE,registerComponent:(name,c)=>{tick=c.tick;}},Stimulus:S,StimulusPatterns:P,layoutConfig:L,motionConfig:M,KiemelConfig:KC,KiemelMotion:KM,KiemelEnvironment:KE,KiemelProjection:{create(T,model,p){const g=new T.Group();g.userData.projection={source:KE.build(T,model,p)};return g;},render(){}},crypto:require('node:crypto').webcrypto,
   URLSearchParams,location:{search:'?preview=1',origin:'http://test'},parent,isSecureContext:false,navigator:{},
   performance:{now:()=>now,timeOrigin:100000},Date,console,setTimeout:()=>1,clearTimeout(){},setInterval(){},reportStartupError:e=>{throw Error(e);}};
 window.AFRAME=sandbox.AFRAME;
@@ -118,9 +118,10 @@ async function flush(){await Promise.resolve();await Promise.resolve();}
  scene.renderer.xr.getCamera=()=>({cameras:[leftEye,rightEye],getWorldPosition(){throw Error('Use stereo centre');}});
  headset('start',{protocol:'kiemel',mode:'kiemel',pattern:'kiemel-triangles',kiemel:kcfg,runId:'no-calibration'});await flush();assert.equal(fixture.lastStatus().status,'blocked');
  headset('calibrate',{protocol:'kiemel',pattern:'kiemel-triangles',kiemel:kcfg});await flush();assert.equal(fixture.lastStatus().calibrated,true);
+ const moving=()=>kiemel.mesh.userData.projection.source;
  const fixedGroup=kiemel.mesh,fingerprint=fixture.lastStatus().patternSettings.fingerprint;
- assert.equal(fixedGroup.children[3].geometry.attributes.position.array.length,1500*9);
- assert.equal(fixedGroup.userData.fixation.visible,false);
+ assert.equal(fixedGroup.userData.projection.source.children[3].geometry.attributes.position.array.length,1500*9);
+ assert.equal(fixedGroup.userData.projection.source.userData.fixation.visible,false);
  leftEye.matrixWorld.elements[12]+=.5;rightEye.matrixWorld.elements[12]+=.5; // Tracking moves, calibrated scene must not follow.
  assert.equal(fixture.lastStatus().patternSettings.totalCount,1500);
  assert.equal(fixture.lastStatus().layoutSettings.geometry.frontDistance,1.07);
@@ -132,16 +133,16 @@ async function flush(){await Promise.resolve();await Promise.resolve();}
   assert.equal(fixture.lastStatus().status,'pre-static');assert.equal(kiemel.mesh,fixedGroup);
   assert.equal(fixture.lastStatus().patternSettings.fingerprint,fingerprint);
   assert.equal(fixture.lastStatus().layoutSettings.eyeOrigin[0],0);
-  now=begin+4999;tick();assert.equal(kiemel.object3D.rotation.x,0);assert.equal(kiemel.object3D.position.z,0);
+  now=begin+4999;tick();assert.equal(moving().rotation.x,0);assert.equal(kiemel.object3D.position.z,0);
   now=begin+5000;tick();assert.equal(fixture.lastStatus().status,'running');
   now=begin+7000;tick();
   const expected=KM.at(7,kcfg);
-  assert(Math.abs(kiemel.object3D.position.z-expected.eyeExactZ)<1e-12);
-  assert(Math.abs(kiemel.object3D.rotation.x-KM.rad(expected.angleDeg))<1e-12);
-  if(condition==='translation')assert.equal(kiemel.object3D.rotation.x,0);
-  else assert(Math.abs(kiemel.object3D.rotation.x)>1e-5);
+  assert(Math.abs(moving().position.z-expected.eyeExactZ)<1e-12);
+  assert(Math.abs(moving().rotation.x-KM.rad(expected.renderAngleDeg))<1e-12);
+  if(condition==='translation')assert.equal(moving().rotation.x,0);
+  else assert(Math.abs(moving().rotation.x)>1e-5);
   headset('configure',{pattern:'room'});await flush();assert.equal(fixture.lastStatus().status,'blocked');assert.equal(kiemel.object3D.visible,true);
-  now=begin+255000;tick();assert.equal(fixture.lastStatus().status,'post-static');assert.equal(kiemel.object3D.rotation.x,0);
+  now=begin+255000;tick();assert.equal(fixture.lastStatus().status,'post-static');assert.equal(moving().rotation.x,0);
   now=begin+260000;tick();assert.equal(fixture.lastStatus().status,'idle');
   const saved=fixture.writes.find(w=>w.path.endsWith('/'+id)).value;recorded.push(saved);
   assert.equal(saved.reason,'completed');assert.equal(saved.samples.at(-1)[0],260000);
@@ -150,16 +151,16 @@ async function flush(){await Promise.resolve();await Promise.resolve();}
  }
  assert.equal(recorded[0].samples[2][8],recorded[1].samples[2][8]);assert.equal(recorded[1].samples[2][8],recorded[2].samples[2][8]);
  headset('start',{protocol:'kiemel',mode:'kiemel',pattern:'kiemel-triangles',kiemel:kcfg,runId:'kiemel-stop'});await flush();
- now+=7000;tick();const beforeStop=Math.abs(kiemel.object3D.rotation.x);
- headset('return');await flush();now+=1000;tick();assert(Math.abs(kiemel.object3D.rotation.x)<beforeStop);
- now+=1000;tick();assert.equal(kiemel.object3D.rotation.x,0);assert.equal(fixture.lastStatus().status,'idle');
+ now+=7000;tick();const beforeStop=Math.abs(moving().rotation.x);
+ headset('return');await flush();now+=1000;tick();assert(Math.abs(moving().rotation.x)<beforeStop);
+ now+=1000;tick();assert.equal(moving().rotation.x,0);assert.equal(fixture.lastStatus().status,'idle');
  headset('start',{protocol:'kiemel',mode:'baseline',pattern:'kiemel-triangles',kiemel:kcfg,runId:'kiemel-baseline'});await flush();
- now+=7000;tick();assert.equal(kiemel.object3D.rotation.x,0);assert.equal(kiemel.object3D.position.z,0);
+ now+=7000;tick();assert.equal(moving().rotation.x,0);assert.equal(kiemel.object3D.position.z,0);
  headset('emergency');await flush();assert.equal(fixture.lastStatus().status,'idle');
  const changed=KC.clone(kcfg);changed.body.hipHeight=1;
  headset('start',{protocol:'kiemel',mode:'kiemel',pattern:'kiemel-triangles',kiemel:changed,runId:'body-changed'});await flush();assert.equal(fixture.lastStatus().status,'blocked');
  const fixation=KC.clone(kcfg);fixation.pattern.fixationPoint=true;
- headset('configure',{pattern:'kiemel-triangles',kiemel:fixation});await flush();assert.equal(kiemel.mesh,fixedGroup);assert.equal(fixedGroup.userData.fixation.visible,true);assert.equal(fixture.lastStatus().patternSettings.fingerprint,fingerprint);
+ headset('configure',{pattern:'kiemel-triangles',kiemel:fixation});await flush();assert.equal(kiemel.mesh,fixedGroup);assert.equal(fixedGroup.userData.projection.source.userData.fixation.visible,true);assert.equal(fixture.lastStatus().patternSettings.fingerprint,fingerprint);
  headset('configure',{pattern:'room'});await flush();assert.equal(kiemel.object3D.visible,false);assert.equal(world.object3D.visible,true);
  console.log('PASS: production Quest ticks move sin/legacy CSV, smooth STOP, emergency STOP, grid mesh/white surround, idle scene switching');
  console.log('PASS: production Kiemel calibration/3 transforms/260s timeline/fixed pattern/STOP/Baseline/body-change rejection/logs');

@@ -22,7 +22,7 @@ class KiemelBrowserChecks(browser_checks.BrowserChecks):
         self.assertEqual(self.status()['layoutSettings']['walls'][0]['center'], [0, 0, -1.07])
         self.assertTrue(self.page.locator('.a-enter-vr-button').is_visible())
         result = self.page.evaluate('''()=>{
-          const s=document.querySelector('a-scene'),group=s.querySelector('#kiemel-environment').getObject3D('mesh');
+          const s=document.querySelector('a-scene'),group=s.querySelector('#kiemel-environment').getObject3D('mesh').userData.projection.source;
           s.object3D.updateMatrixWorld(true);s.renderer.render(s.object3D,s.camera);
           const gl=s.renderer.getContext(),data=new Uint8Array(s.canvas.width*s.canvas.height*4);
           gl.readPixels(0,0,s.canvas.width,s.canvas.height,gl.RGBA,gl.UNSIGNED_BYTE,data);
@@ -45,7 +45,7 @@ class KiemelBrowserChecks(browser_checks.BrowserChecks):
         self.command('start',protocol='kiemel',mode='kiemel',pattern='kiemel-triangles',kiemel=config)
         self.assertEqual(self.status()['status'],'pre-static')
         # Real elapsed time and unmodified A-Frame render loop: no manual tick/time jump.
-        self.page.wait_for_function("Math.abs(document.querySelector('#kiemel-environment').object3D.rotation.x)>0.003",timeout=15000)
+        self.page.wait_for_function("Math.abs(document.querySelector('#kiemel-environment').getObject3D('mesh').userData.projection.source.rotation.x)>0.003",timeout=15000)
         self.page.wait_for_function("fixture.lastStatus().renderedFrames>50 && fixture.lastStatus().kiemelPhase==='stimulus'",timeout=8000)
         self.assertGreater(self.status()['elapsedSeconds'],5)
         self.assertTrue(self.page.evaluate("document.querySelector('#kiemel-environment').object3D.visible"))
@@ -69,12 +69,15 @@ class KiemelBrowserChecks(browser_checks.BrowserChecks):
             self.command('start',protocol='kiemel',mode='kiemel',pattern='kiemel-triangles',kiemel=config)
             self.page.evaluate('fixture.advance(7000)')
             result=self.page.evaluate('''({config,origin})=>{
-              const node=document.querySelector('#kiemel-environment').object3D;node.updateMatrixWorld(true);
+              const fixedScreen=document.querySelector('#kiemel-environment').object3D;
+              const node=document.querySelector('#kiemel-environment').getObject3D('mesh').userData.projection.source;node.updateMatrixWorld(true);
               const expected=KiemelMotion.at(7,config),center=new AFRAME.THREE.Vector3(...expected.pivot);
               const fixed=center.clone().applyMatrix4(node.matrixWorld);
-              const desired=center.clone();desired.x+=origin[0];desired.y+=origin[1];desired.z+=origin[2];
-              return {angle:node.rotation.x,z:node.position.z-origin[2],expectedAngle:KiemelMotion.rad(expected.angleDeg),expectedZ:expected.eyeExactZ,pivotError:fixed.distanceTo(desired)};
+              const desired=center.clone();
+              return {angle:node.rotation.x,z:node.position.z,expectedAngle:KiemelMotion.rad(expected.renderAngleDeg),expectedZ:expected.eyeExactZ,pivotError:fixed.distanceTo(desired),screenAngle:fixedScreen.rotation.x,screenPosition:fixedScreen.position.toArray()};
             }''', {'config':config,'origin':origin})
+            self.assertEqual(result['screenAngle'],0)
+            self.assertEqual(result['screenPosition'],origin)
             self.assertAlmostEqual(result['angle'], result['expectedAngle'])
             self.assertAlmostEqual(result['z'], result['expectedZ'])
             if condition=='translation': self.assertEqual(result['angle'], 0)
@@ -82,6 +85,31 @@ class KiemelBrowserChecks(browser_checks.BrowserChecks):
             self.assertEqual(self.status()['patternSettings']['fingerprint'], fingerprint)
             self.command('emergency')
         self.assertEqual(self.errors, [])
+
+    def test_kiemel_render_targets_change_but_screens_and_reference_stay_fixed(self):
+        self.quest();self.xr()
+        config=self.config()
+        self.command('calibrate',protocol='kiemel',pattern='kiemel-triangles',kiemel=config)
+        self.command('start',protocol='kiemel',mode='kiemel',pattern='kiemel-triangles',kiemel=config)
+        result=self.page.evaluate('''()=>{
+          const s=document.querySelector('a-scene');s.pause();s.renderer.setAnimationLoop(null);
+          const group=document.querySelector('#kiemel-environment').getObject3D('mesh'),p=group.userData.projection;
+          const snapshot=()=>p.views.map(v=>{
+            const bytes=new Uint8Array(p.resolution*p.resolution*4);s.renderer.readRenderTargetPixels(v.target,0,0,p.resolution,p.resolution,bytes);
+            let hash=2166136261,white=0;for(let i=0;i<bytes.length;i+=4){hash=Math.imul(hash^bytes[i],16777619)>>>0;if(bytes[i]>250)white++;}return {hash,white};
+          });
+          const screens=p.views.map(v=>v.screen.matrixWorld.toArray()),cameras=p.views.map(v=>v.camera.matrixWorld.toArray());
+          const initial=snapshot();fixture.now=performance.now();Object.defineProperty(performance,'now',{value:()=>fixture.now});fixture.now+=15000;s.components['stimulus-driver'].tick();
+          const moved=snapshot();s.camera.position.x+=.2;s.camera.rotation.y+=.3;s.camera.updateMatrixWorld(true);
+          const enabled=s.renderer.xr.enabled,oldTarget=s.renderer.getRenderTarget();s.renderer.xr.enabled=true;
+          KiemelProjection.render(s.renderer,group);const restored=s.renderer.xr.enabled&&s.renderer.getRenderTarget()===oldTarget;s.renderer.xr.enabled=enabled;
+          return {initial,moved,afterHead:snapshot(),screensFixed:JSON.stringify(screens)===JSON.stringify(p.views.map(v=>v.screen.matrixWorld.toArray())),camerasFixed:JSON.stringify(cameras)===JSON.stringify(p.views.map(v=>v.camera.matrixWorld.toArray())),restored};
+        }''')
+        self.assertTrue(result['screensFixed']);self.assertTrue(result['camerasFixed']);self.assertTrue(result['restored'])
+        for initial,moved in zip(result['initial'],result['moved']):
+            self.assertGreater(initial['white'],100);self.assertNotEqual(initial['hash'],moved['hash'])
+        self.assertEqual(result['moved'],result['afterHead'])
+        self.assertEqual(self.errors,[])
 
     def test_kiemel_operator_preview_and_protocol(self):
         self.page.goto(self.base+'/operator.html')
