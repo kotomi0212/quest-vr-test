@@ -2,22 +2,6 @@
 (function (scope) {
   'use strict';
   const limits = Object.freeze({ angle: 20, velocity: 30, frequency: 2 });
-  function trap(c) {
-    const a = c.amplitudeDeg, v = c.velocityDegSec, r = c.rampSec, h = c.holdSec;
-    if (![a,v,r,h].every(Number.isFinite) || a <= 0 || a > limits.angle || v <= 0 || v > limits.velocity || r < .05 || h < 0 || h > 30 || v*r > a) throw Error('TrapV設定: 0<A≤20°, 0<V≤30°/s, ramp≥0.05s, V×ramp≤A');
-    const plateau = a/v-r, move = 2*r+plateau;
-    return { a,v,r,h,plateau,move,period:2*(move+h) };
-  }
-  function trapAngle(c,t) {
-    const p=trap(c), q=((t%p.period)+p.period)%p.period, half=p.move+p.h;
-    const returning=q>=half, s=returning?q-half:q;
-    let x;
-    if(s<p.r) x=p.v*s*s/(2*p.r);
-    else if(s<p.r+p.plateau) x=p.v*(s-p.r/2);
-    else if(s<p.move) x=p.a-p.v*(p.move-s)**2/(2*p.r);
-    else x=p.a;
-    return returning?p.a-x:x;
-  }
   function parseCsv(content) {
     const points=[];
     for(const line of content.replace(/^\uFEFF/,'').trim().split(/\r?\n/)) {
@@ -35,7 +19,7 @@
     let a=0,b=p.length-1; while(a+1<b){const m=(a+b)>>1;if(p[m][0]<=t)a=m;else b=m;}
     return p[a][1]+(t-p[a][0])/(p[b][0]-p[a][0])*(p[b][1]-p[a][1]);
   }
-  function angle(c,t,p) { return c.mode==='trapv'?trapAngle(c,t):c.mode==='sine'?c.amplitudeDeg*Math.sin(2*Math.PI*c.frequencyHz*t):c.mode==='csv'?interpolate(p,t):0; }
+  function angle(c,t,p) { return c.mode==='sine'?c.amplitudeDeg*Math.sin(2*Math.PI*c.frequencyHz*t):c.mode==='csv'?interpolate(p,t):0; }
   function drawGrid(ctx, width, height) {
     // Thin black horizontal/vertical stripes on white, not alternating tiles.
     // 32 columns over pi metres and 60 rows over six metres: ~10 cm spacing.
@@ -45,6 +29,6 @@
     for(let x=0;x<=32;x++) ctx.fillRect(x*dx-dx*.08,0,dx*.16,height);
     for(let y=0;y<=60;y++) ctx.fillRect(0,y*dy-dy*.08,width,dy*.16);
   }
-  const api={limits,trap,trapAngle,parseCsv,interpolate,angle,drawGrid}; scope.Stimulus=api;
+  const api={limits,parseCsv,interpolate,angle,drawGrid}; scope.Stimulus=api;
   if(typeof module!=='undefined') module.exports=api;
 })(globalThis);

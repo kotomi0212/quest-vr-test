@@ -3,7 +3,7 @@
   const $ = id => document.getElementById(id);
   const tell = text => { $('log').textContent = text; };
   let operatorKiemel=KiemelConfig.clone(KiemelConfig.CONFIG);
-  let legacyMode='trapv';
+  let legacyMode='sine';
   function populateKiemel() {
     const m=operatorKiemel.motion;
     $('kiemelCondition').value=m.type;$('kiemelScale').value=m.amplitudeScale;
@@ -20,7 +20,7 @@
   }
   populateKiemel();
   function updateModeLabel() {
-    const isK=$('mode').value==='kiemel';$('kiemelControls').hidden=!isK;
+    const isK=$('mode').value==='kiemel';$('kiemelControls').hidden=!isK;$('legacyControls').hidden=isK;$('legacyBody').hidden=isK;$('estimateAnkle').hidden=isK;
     $('start').textContent=isK?'START（静止→刺激→静止）':'START（3秒後開始）';
   }
   const patternSelect=$('pattern');
@@ -39,7 +39,7 @@
       (definition.kind === 'noise' ? `振幅指数${definition.spectralSlope}、seed=${definition.seed}。` : `縞の向き${definition.orientation}°、明暗${definition.stripeCount}組。`) +
       '画像設定: pattern-config.js / 配置: layout-config.js / 回転: motion-config.js';
   }
-  describePattern();
+  updateModeLabel();describePattern();
   const config = window.VR_REMOTE_CONFIG;
   if (!window.firebase || !config?.firebase) { $('authState').textContent = 'Firebaseの読み込みに失敗しました。再読み込みしてください。'; return; }
   firebase.initializeApp(config.firebase);
@@ -57,7 +57,7 @@
         for(let i=0;i<=640;i++){const y=80-KiemelMotion.at(i/640*total,cfg).eyeLinearZ*1000;if(i)ctx.lineTo(i,y);else ctx.moveTo(i,y);}
         ctx.strokeStyle='#165e91';ctx.stroke();$('waveError').textContent='Kiemel：眼位置相当変位（縦軸±8 cm、横軸'+total+'秒）。共通波形から3条件を換算。追加ランプ・速度制限なし。';return;
       }
-      const c={mode:$('mode').value,amplitudeDeg:Number($('amp').value),frequencyHz:Number($('freq').value),velocityDegSec:Number($('velocity').value),rampSec:Number($('ramp').value),holdSec:Number($('hold').value)};
+      const c={mode:$('mode').value,amplitudeDeg:Number($('amp').value),frequencyHz:Number($('freq').value)};
       const ctx=$('waveform').getContext('2d'); ctx.clearRect(0,0,640,160);ctx.beginPath();
       const duration=Number($('duration').value);
       for(let i=0;i<=640;i++){const a=Stimulus.angle(c,i/640*duration); const y=80-a*3; if(i)ctx.lineTo(i,y);else ctx.moveTo(i,y);}
@@ -83,7 +83,7 @@
     quest = snap.val();
     const v = quest;
     if(v?.calibration) { $('measuredEye').textContent='Quest目高: '+v.calibration.measuredEyeHeightM+' m / 足首補正: '+v.calibration.manualAnkleHeightM+' m'+(v.calibration.kiemel?' / l1='+v.calibration.kiemel.l1+' m / l2='+v.calibration.kiemel.l2+' m / 入力眼高との差='+v.calibration.kiemel.inputEyeMinusTrackedEyeM+' m':''); }
-    $('state').textContent = v ? v.status + ' / ' + (v.runId || v.lastRunId || '-') + ' / 適用角度 ' + Number(v.appliedAngleDeg || 0).toFixed(3) + '° / 映像: ' + (StimulusPatterns.get(v.pattern)?.label || v.pattern || '不明')+(v.kiemelCondition?' / '+v.kiemelCondition+' / 前後移動='+Number(v.translationZ||0).toFixed(5)+' m':'') : 'Quest未接続';
+    $('state').textContent = v ? v.status + ' / ' + (v.runId || v.lastRunId || '-') + ' / 適用角度 ' + Number(v.appliedAngleDeg || 0).toFixed(3) + '° / 映像: ' + (StimulusPatterns.get(v.pattern)?.label || v.pattern || '不明')+(v.kiemelCondition?' / '+v.kiemelCondition+' / 前後移動='+Number(v.translationZ||0).toFixed(5)+' m':'')+(v.kiemelPhase?' / '+v.kiemelPhase+' / 経過 '+Number(v.elapsedSeconds||0).toFixed(1)+'秒 / 描画 '+(v.renderedFrames||0)+' frames':'') : 'Quest未接続';
     $('questDiagnostics').textContent = v ?
       `3D: ${v.renderStarted ? '描画中' : '未完了'} / VRボタン: ${v.vrButton ? '生成済み' : '未生成'} / WebXR: ${v.xrSupport || '不明'} / immersive-vr: ${v.immersive ? '開始済み' : '未開始'} / XR描画: ${v.xrPresenting ?? '不明'} / XRセッション: ${v.xrSessionActive ?? '不明'} / A-Frame VR: ${v.aframeVR ?? '不明'} / 位置合わせ: ${v.calibrated ? '完了' : '未完了'} / Firebase: ${v.firebaseState || '不明'} / 受信端末: ${v.client || '不明'} / 接続ID: ${v.instanceId || '-'}${v.startupError ? ' / 起動エラー: ' + v.startupError : ''}` : '';
     if (!awaiting || v?.commandSeq !== awaiting.seq) return;
@@ -94,7 +94,7 @@
       blocked: 'Questで開始・位置合わせができません：' + (v.error || '状態を確認してください'),
       'log-error': 'Questのログ保存に失敗しました：' + (v.error || ''),
       returning: 'QuestでBaselineへ復帰中',
-      'pre-static':'Kiemel：最初の静止映像',
+      'pre-static':'Kiemel：最初の静止映像（初期設定5秒、その後に刺激開始）',
       'post-static':'Kiemel：最後の静止映像',
       ready: awaiting.type === 'configure' ? 'Questの映像を切り替えました' : v.calibrated ? '✓ Questの位置合わせが完了しました' : 'QuestでVR開始済み。立ち位置を合わせてください'
     };
@@ -108,7 +108,7 @@
       if (subscribed) root.child('status').off('value', receive);
       subscribed = false; quest = null; previewReady = false; $('preview').removeAttribute('src'); return;
     }
-    if (!$('preview').getAttribute('src')) $('preview').src = 'quest.html?preview=1&v=20261021-kiemel1';
+    if (!$('preview').getAttribute('src')) $('preview').src = 'quest.html?preview=1&v=20261021-kiemel2';
     if (!subscribed) { subscribed = true; root.child('status').on('value', receive, error => tell('Quest状態の購読エラー: ' + error.message)); }
   });
   setInterval(() => {
@@ -139,14 +139,12 @@
         !Number.isFinite(eyeHeightM) || eyeHeightM < .8 || eyeHeightM > 2.1 || !Number.isFinite(heightCm) || heightCm < 100 || heightCm > 220)) { tell('身長・目・足首の高さが範囲外です'); return; }
       if (!isKiemel && type === 'start' && (!Number.isFinite(durationSec) || durationSec < 5 || durationSec > 600 ||
         (mode === 'sine' && (!Number.isFinite(frequencyHz) || frequencyHz <= 0 || frequencyHz > 2 || !Number.isFinite(amplitudeDeg) || amplitudeDeg < 0 || amplitudeDeg > 20)))) { tell('刺激設定が範囲外です'); return; }
-      const trapSettings = { amplitudeDeg, velocityDegSec:Number($('velocity').value), rampSec:Number($('ramp').value), holdSec:Number($('hold').value) };
-      if(!isKiemel && type==='start' && mode==='trapv') Stimulus.trap(trapSettings);
       const seq = lastSeq = Math.max(Date.now(), lastSeq + 1);
       const command = { type, seq, questInstanceId: quest?.instanceId || null,
         runId: 'trial-' + crypto.randomUUID(), requestedAt: firebase.database.ServerValue.TIMESTAMP };
       if (!safe) {
         if(isKiemel)Object.assign(command,{protocol:'kiemel',mode:baselineRequest?'baseline':'kiemel',pattern:'kiemel-triangles',durationSec,kiemel:kcfg});
-        else Object.assign(command, { heightCm, eyeHeightM, ankleHeightM, mode, frequencyHz, amplitudeDeg, durationSec, pattern:$('pattern').value, ...trapSettings });
+        else Object.assign(command, { heightCm, eyeHeightM, ankleHeightM, mode, frequencyHz, amplitudeDeg, durationSec, pattern:$('pattern').value });
       }
       attempt = { seq, type, received: false }; awaiting = attempt;
       // set() queues writes offline. A reconnect may deliver this later; Quest rejects stale START/calibrate.
@@ -162,9 +160,9 @@
   let baselineRequest = false;
   $('baseline').onclick = async () => { baselineRequest = true; try { await dispatch('start'); } finally { baselineRequest = false; } };
   $('mode').onchange = () => {
-    const isK=$('mode').value==='kiemel';$('kiemelControls').hidden=!isK;
+    const isK=$('mode').value==='kiemel';$('kiemelControls').hidden=!isK;$('legacyControls').hidden=isK;$('legacyBody').hidden=isK;$('estimateAnkle').hidden=isK;
     if(!isK)legacyMode=$('mode').value;
-    if(isK)$('pattern').value='kiemel-triangles';else if($('pattern').value==='kiemel-triangles')$('pattern').value=StimulusPatterns.defaultPattern;
+    if(isK)$('pattern').value='kiemel-triangles';else if($('pattern').value==='kiemel-triangles')$('pattern').value='grid';
     updateModeLabel();describePattern();drawWave();return dispatch('configure');
   };
   $('pattern').onchange = () => {

@@ -5,7 +5,7 @@ const source=fs.readFileSync(path.join(__dirname,'../operator.js'),'utf8');
 const nodes={};
 for(const m of html.matchAll(/id="([^"]+)"/g))nodes[m[1]]={value:'',textContent:'',style:{},children:[],appendChild(n){this.children.push(n);},addEventListener(){},getAttribute(){return null;},setAttribute(){},removeAttribute(){},getContext(){return {clearRect(){},beginPath(){},lineTo(){},moveTo(){},stroke(){}};}};
 for(const m of source.matchAll(/\$\('([^']+)'\)/g))assert(nodes[m[1]],'Missing operator element '+m[1]);
-Object.entries({mode:'trapv',pattern:'grid',amp:'5',freq:'.2',velocity:'2',ramp:'.5',hold:'1',duration:'10',heightCm:'160',eyeCm:'150',ankleCm:'8.8'}).forEach(([id,v])=>nodes[id].value=v);
+Object.entries({mode:'sine',pattern:'grid',amp:'5',freq:'.2',duration:'10',heightCm:'160',eyeCm:'150',ankleCm:'8.8'}).forEach(([id,v])=>nodes[id].value=v);
 const writes=[],listeners={};let downloadLogs={},csvBlob;
 function ref(p){return {child:n=>ref(p+'/'+n),on:(e,cb)=>{listeners[p]=cb;if(p==='.info/connected')cb({val:()=>true});},off(){},set:async c=>{writes.push(c);},get:async()=>({val:()=>downloadLogs})};}
 const auth={onAuthStateChanged:cb=>cb({uid:'operator',isAnonymous:false})};
@@ -15,7 +15,7 @@ const context={window:{firebase,VR_REMOTE_CONFIG:{firebase:{},sessionId:'test'},
 vm.runInNewContext(source,context);
 listeners['sessions/test/status']({val:()=>({instanceId:'quest',at:Date.now(),firebaseState:'接続済み',immersive:true,renderStarted:true,calibrated:true})});
 (async()=>{
- await nodes.start.onclick();assert.equal(writes.at(-1).mode,'trapv');assert.equal(writes.at(-1).pattern,'grid');
+ nodes.pattern.value='grid';await nodes.start.onclick();assert.equal(writes.at(-1).mode,'sine');assert.equal(writes.at(-1).pattern,'grid');
  nodes.mode.value='sine';await nodes.start.onclick();assert.equal(writes.at(-1).mode,'sine');
  await nodes.baseline.onclick();assert.equal(writes.at(-1).mode,'baseline');assert.equal(nodes.mode.value,'sine');
  await nodes.stop.onclick();assert.equal(writes.at(-1).type,'return');
@@ -55,6 +55,6 @@ listeners['sessions/test/status']({val:()=>({instanceId:'quest',at:Date.now(),fi
  assert.equal(old.length,headers.length);assert.equal(modern.length,headers.length);
  assert.equal(old[headers.indexOf('translation_z_m')],'');assert.equal(modern[headers.indexOf('translation_z_m')],'0.02');assert.equal(modern[headers.indexOf('phase')],'stimulus');
  nodes.pattern.value='room';await nodes.pattern.onchange();assert.notEqual(nodes.mode.value,'kiemel');assert.equal(writes.at(-1).protocol,undefined);
- console.log('PASS: operator DOM references, TrapV/sin/Baseline commands, STOP/emergency, idle pattern command, simplified selectors');
+ console.log('PASS: operator DOM references, sin/Baseline commands, STOP/emergency, idle pattern command, simplified selectors');
  console.log('PASS: Kiemel conditions/body conversion/preset restore/short timing/no independent amplitude/mixed-schema CSV');
 })().catch(e=>{console.error(e);process.exitCode=1;});

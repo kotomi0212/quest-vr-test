@@ -287,6 +287,7 @@ class BrowserChecks(unittest.TestCase):
     def test_new_trial_after_stop_does_not_wait_for_log_upload(self):
         self.quest(); self.calibrated(); self.command('start')
         self.page.evaluate('fixture.holdLogs = true')
+        self.command('stop')
         self.command('start', mode='baseline')
         self.assertEqual(self.status()['status'], 'countdown')
         self.assertTrue(self.page.evaluate("fixture.writes.some(w=>w.path.includes('/logs/'))"))
