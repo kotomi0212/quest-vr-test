@@ -21,6 +21,7 @@ window.addEventListener('unhandledrejection',e=>reportStartupError([e.reason?.me
 <div id="startup-error" hidden style="position:fixed;bottom:72px;left:12px;right:12px;z-index:100;background:#fff1f0;color:#9c2222;padding:12px;font:14px system-ui"></div>
 <template id="scene-template">
 <a-scene webxr="referenceSpaceType: local-floor" stimulus-driver background="color: #e8eef7" xr-mode-ui="enabled: true">
+  <a-assets><canvas id="noise-room-texture" width="512" height="512"></canvas></a-assets>
   <!-- Approximate modern room: dimensions and furnishings are design choices, not recovered from the paper. Origin = ankle/floor. -->
   <a-entity id="visual-world">
     <a-entity id="grid-room-pattern" visible="false">
@@ -31,6 +32,16 @@ window.addEventListener('unhandledrejection',e=>reportStartupError([e.reason?.me
       <a-plane position="-4 2 0" rotation="0 90 0" width="8" height="4" material="src: url(grid.svg); shader: flat; repeat: 8 4"></a-plane>
       <a-plane position="4 2 0" rotation="0 -90 0" width="8" height="4" material="src: url(grid.svg); shader: flat; repeat: 8 4"></a-plane>
       <a-circle id="fixation-point" position="0 1.5 -3.98" radius="0.025" color="#e32636"
+        material="shader: flat; depthTest: false; depthWrite: false"></a-circle>
+    </a-entity>
+    <a-entity id="noise-room-pattern" visible="false">
+      <a-plane position="0 0 0" rotation="-90 0 0" width="8" height="8" material="src: #noise-room-texture; shader: flat"></a-plane>
+      <a-plane position="0 4 0" rotation="90 0 0" width="8" height="8" material="src: #noise-room-texture; shader: flat"></a-plane>
+      <a-plane position="0 2 -4" width="8" height="4" material="src: #noise-room-texture; shader: flat; repeat: 2 1"></a-plane>
+      <a-plane position="0 2 4" rotation="0 180 0" width="8" height="4" material="src: #noise-room-texture; shader: flat; repeat: 2 1"></a-plane>
+      <a-plane position="-4 2 0" rotation="0 90 0" width="8" height="4" material="src: #noise-room-texture; shader: flat; repeat: 2 1"></a-plane>
+      <a-plane position="4 2 0" rotation="0 -90 0" width="8" height="4" material="src: #noise-room-texture; shader: flat; repeat: 2 1"></a-plane>
+      <a-circle id="noise-fixation-point" position="0 1.5 -3.98" radius="0.025" color="#e32636"
         material="shader: flat; depthTest: false; depthWrite: false"></a-circle>
     </a-entity>
     <a-entity id="room-pattern">
@@ -133,7 +144,7 @@ window.addEventListener('unhandledrejection',e=>reportStartupError([e.reason?.me
 </a-scene>
 </template>
 <script defer src="stimulus-engine.js?v=20261022-multi10"></script>
-<script defer src="pattern-config.js?v=20261022-gridroom1"></script>
+<script defer src="pattern-config.js?v=20261022-noiseroom1"></script>
 <script defer src="layout-config.js?v=20261020-layout2"></script>
 <script defer src="motion-config.js?v=20261020-layout2"></script>
 <script defer src="stimulus-patterns.js?v=20261020-layout2"></script>
@@ -141,5 +152,5 @@ window.addEventListener('unhandledrejection',e=>reportStartupError([e.reason?.me
 <script defer src="kiemel-motion.js?v=20261021-xrfix1"></script>
 <script defer src="kiemel-environment.js?v=20261021-xrfix1"></script>
 <script defer src="kiemel-projection.js?v=20261021-xrfix1"></script>
-<script defer src="quest-runtime.js?v=20261022-multi10"></script>
+<script defer src="quest-runtime.js?v=20261022-noiseroom1"></script>
 </body></html>

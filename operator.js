@@ -24,7 +24,9 @@
     $('start').textContent=isK?'START（静止→刺激→静止）':'START（3秒後開始）';
   }
   const patternSelect=$('pattern');
+  const visiblePatterns=new Set(['grid-room','noise-room']);
   for (const [id,definition] of Object.entries(StimulusPatterns.definitions)) {
+    if(!visiblePatterns.has(id))continue;
     const option=document.createElement('option');option.value=id;option.textContent=definition.label;
     patternSelect.appendChild(option);
   }
@@ -33,7 +35,7 @@
     const definition=StimulusPatterns.get(patternSelect.value), plane=layoutConfig.plane;
     if(definition.kind==='kiemel') {$('patternDescription').textContent='Kiemel：正面1.07 m、左右各1.52 m。黒背景に各壁500個の白三角形。高さ・奥行きは仮設定。設定元: kiemel-config.js';return;}
     $('patternDescription').textContent=definition.kind === 'legacy' ?
-      (patternSelect.value === 'grid-room' ? '8×4×8 mのグレーのグリッド室内全体を、校正した足関節軸まわりに回転します。' : patternSelect.value === 'room' ? '既存の部屋：quest.htmlの #room-pattern。' : '既存の半円筒：layout-config.jsのcylinder。') :
+      (patternSelect.value === 'grid-room' ? '8×4×8 mのグレーのグリッド室内全体を、選択した関節軸まわりに回転します。' : patternSelect.value === 'noise-room' ? '同じ8×4×8 m室内の6面すべてに、固定seedの1/f型空間ノイズを表示します。' : patternSelect.value === 'room' ? '既存の部屋：quest.htmlの #room-pattern。' : '既存の半円筒：layout-config.jsのcylinder。') :
       `表示面：幅${plane.widthM} m×高さ${plane.heightM} m、中心(${plane.positionM.x}, ${plane.positionM.y}, ${plane.positionM.z}) m。` +
       `画像：${definition.width}×${definition.height} px、brightness=${definition.brightness}、contrast=${definition.contrast}。` +
       (definition.kind === 'noise' ? `振幅指数${definition.spectralSlope}、seed=${definition.seed}。` : `縞の向き${definition.orientation}°、明暗${definition.stripeCount}組。`) +

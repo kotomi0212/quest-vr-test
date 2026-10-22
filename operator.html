@@ -15,8 +15,8 @@
 <label>映像パターン（運動条件は共通）</label><select id="pattern"></select>
 <p><button id="applyPattern">選択した映像をQuestへ反映（VR開始前も可）</button></p>
 <p id="patternDescription" class="muted"></p><p class="muted">模様は停止中に変更してください。比較時は振幅・周波数・時間・位置合わせをそろえます。コントラスト値はソフトウェア上の設定で、Questの実測輝度を保証するものではありません。</p>
-<label>刺激</label><select id="mode"><option value="sine" selected>sin（単一正弦波）</option><option value="multi10">10周波数合成（0.024～2.936 Hz）</option><option value="kiemel">Kiemel：3条件共通の多周波刺激</option></select>
-<fieldset id="kiemelControls"><legend>Kiemel設定（眼の基準位置は校正後に固定）</legend>
+<label>刺激</label><select id="mode"><option value="sine" selected>sin（単一正弦波）</option><option value="multi10">10周波数合成（0.024～2.936 Hz）</option></select>
+<fieldset id="kiemelControls" hidden><legend>Kiemel設定（復旧用・通常UIでは非表示）</legend>
 <label>運動条件</label><select id="kiemelCondition"><option value="ankle">Ankle rotation</option><option value="hip">Hip rotation</option><option value="translation">Translation</option></select>
 <label>眼の高さ・実測（cm）</label><input id="kiemelEye" type="number" step="0.1" placeholder="必須・推定値なし">
 <label>股関節の高さ・実測（cm）</label><input id="kiemelHip" type="number" step="0.1" placeholder="必須・推定値なし">
@@ -38,11 +38,11 @@
 <p><button id="emergency" class="danger">緊急停止（即時0°）</button> <button id="retry">接続再試行（PC再読込）</button> <span id="pcConnection"></span></p><p><button id="baseline">Baseline開始</button> <button id="csvDownload">ログCSV出力</button></p><p id="log" class="action-feedback" role="status" aria-live="polite">STARTで開始、STOPで停止します。</p><p><button id="download">Questが保存した刺激ログを取得（JSON）</button></p>
 </section>
 <script src="stimulus-engine.js?v=20261022-multi10"></script>
-<script src="pattern-config.js?v=20261022-gridroom1"></script>
+<script src="pattern-config.js?v=20261022-noiseroom1"></script>
 <script src="layout-config.js?v=20261020-layout2"></script>
 <script src="motion-config.js?v=20261020-layout2"></script>
 <script src="stimulus-patterns.js?v=20261020-layout2"></script>
 <script src="kiemel-config.js?v=20261021-xrfix1"></script>
 <script src="kiemel-motion.js?v=20261021-xrfix1"></script>
-<script src="operator.js?v=20261022-multi10"></script>
+<script src="operator.js?v=20261022-noiseroom1"></script>
 </body></html>

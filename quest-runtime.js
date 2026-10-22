@@ -15,6 +15,7 @@
   let xrSupport = '確認中', firebaseState = preview ? 'プレビュー（接続なし）' : '準備中';
   const pivot = new THREE.Vector3(0, 0.088, 0); // 校正原点。motionConfigの固定中心とは独立。
   const patternTextures = new Map();
+  let noiseRoomMetadata = null;
   let selectedPattern = StimulusPatterns.defaultPattern;
   let fixationVisible = true;
   let rotationCenter = 'ankle';
@@ -107,6 +108,8 @@
   function patternSettings() {
     if(selectedPattern==='kiemel-triangles')return {profile:'Kiemel-user-specification',generatorVersion:'kiemel-environment-v1',...KiemelConfig.clone(kiemelConfig.pattern),fingerprint:kiemelModel?.fingerprint||null,totalCount:kiemelModel?.count||null};
     if(selectedPattern==='grid-room')return {profile:'gray-grid-room',dimensionsM:[8,4,8],gridSpacingM:1,fixationVisible};
+    if(selectedPattern==='noise-room')return {profile:'1-over-f-noise-room',dimensionsM:[8,4,8],fixationVisible,
+      texture:noiseRoomMetadata || StimulusPatterns.metadata('noise-1f')};
     return patternTextures.get(selectedPattern)?.metadata || StimulusPatterns.metadata(selectedPattern);
   }
   const show = message => { document.querySelector('#status').textContent = message; };
@@ -141,28 +144,44 @@
     });
   }
   // One visible mesh. Textures are generated once per pattern and reused, never per frame.
+  function prepareNoiseRoom() {
+    if(noiseRoomMetadata)return;
+    const canvas=scene.querySelector('#noise-room-texture');
+    if(!canvas)return;
+    const result=StimulusPatterns.generate('noise-1f'),ctx=canvas.getContext('2d');
+    const image=ctx.createImageData(result.width,result.height);image.data.set(result.rgba);ctx.putImageData(image,0,0);
+    noiseRoomMetadata=result.metadata;
+    // If A-Frame has already created the canvas-backed maps, upload the new pixels.
+    scene.querySelector('#noise-room-pattern')?.object3D?.traverse?.(object=>{if(object.material?.map)object.material.map.needsUpdate=true;});
+  }
   function selectPattern(pattern) {
     const definition = StimulusPatterns.get(pattern);
     if (!definition) throw Error('映像パターン不正');
     pattern = StimulusPatterns.resolve(pattern);
     selectedPattern = pattern;
-    const isKiemel=pattern==='kiemel-triangles', isGridRoom=pattern==='grid-room';
+    const isKiemel=pattern==='kiemel-triangles', isGridRoom=pattern==='grid-room', isNoiseRoom=pattern==='noise-room';
     scene.querySelector('#visual-world').object3D.visible=!isKiemel;
     scene.querySelector('#kiemel-environment').object3D.visible=isKiemel;
     scene.querySelector('#contrast-surround').setAttribute('color',isKiemel?'#000000':'#ffffff');
     if(isKiemel) {scene.querySelector('#contrast-surround').object3D.visible=true;selectKiemel();return;}
-    const gridRoom=scene.querySelector('#grid-room-pattern'), fixation=scene.querySelector('#fixation-point');
+    if(isNoiseRoom)prepareNoiseRoom();
+    const gridRoom=scene.querySelector('#grid-room-pattern'), noiseRoom=scene.querySelector('#noise-room-pattern');
+    const fixation=scene.querySelector('#fixation-point'), noiseFixation=scene.querySelector('#noise-fixation-point');
     gridRoom.object3D.visible=isGridRoom;
+    noiseRoom.object3D.visible=isNoiseRoom;
     gridRoom.object3D.position.set(layoutConfig.anchor === 'calibrated-xz' ? pivot.x : 0,0,layoutConfig.anchor === 'calibrated-xz' ? pivot.z : 0);
+    noiseRoom.object3D.position.set(layoutConfig.anchor === 'calibrated-xz' ? pivot.x : 0,0,layoutConfig.anchor === 'calibrated-xz' ? pivot.z : 0);
     fixation.object3D.visible=isGridRoom && fixationVisible;
+    noiseFixation.object3D.visible=isNoiseRoom && fixationVisible;
     fixation.object3D.position.set(0,calibration?.measuredEyeHeightM || calibration?.previewEyeHeightM || 1.5,-3.98);
+    noiseFixation.object3D.position.set(0,calibration?.measuredEyeHeightM || calibration?.previewEyeHeightM || 1.5,-3.98);
     scene.querySelector('#room-pattern').object3D.visible = pattern === 'room';
-    scene.querySelector('#contrast-surround').object3D.visible = !['room','grid-room'].includes(pattern);
+    scene.querySelector('#contrast-surround').object3D.visible = !['room','grid-room','noise-room'].includes(pattern);
     const el = scene.querySelector('#contrast-pattern');
-    el.object3D.visible = !['room','grid-room'].includes(pattern);
+    el.object3D.visible = !['room','grid-room','noise-room'].includes(pattern);
     if (!['calibrated-xz','world'].includes(layoutConfig.anchor)) throw Error('layoutConfig.anchorが不正です');
     el.object3D.position.set(layoutConfig.anchor === 'calibrated-xz' ? pivot.x : 0, 0, layoutConfig.anchor === 'calibrated-xz' ? pivot.z : 0);
-    if (['room','grid-room'].includes(pattern) || el.dataset.pattern === pattern) return;
+    if (['room','grid-room','noise-room'].includes(pattern) || el.dataset.pattern === pattern) return;
     el.dataset.pattern = pattern;
     const old = el.getObject3D('mesh');
     if(old) { old.geometry.dispose(); old.material.dispose(); }

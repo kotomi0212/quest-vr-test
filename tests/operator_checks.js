@@ -26,7 +26,7 @@ listeners['sessions/test/status']({val:()=>({instanceId:'quest',at:Date.now(),fi
  await nodes.stop.onclick();assert.equal(writes.at(-1).type,'return');
  await nodes.emergency.onclick();assert.equal(writes.at(-1).type,'emergency');
  nodes.pattern.value='room';await nodes.pattern.onchange();assert.equal(writes.at(-1).type,'configure');assert.equal(writes.at(-1).pattern,'room');
- assert.deepEqual(nodes.pattern.children.map(n=>n.value),Object.keys(context.StimulusPatterns.definitions));
+ assert.deepEqual(nodes.pattern.children.map(n=>n.value),['grid-room','noise-room']);
  const common={};
  for(const pattern of ['noise-1f','stripes-high','stripes-low']) {
   nodes.pattern.value=pattern;await nodes.pattern.onchange();assert.equal(writes.at(-1).pattern,pattern);
