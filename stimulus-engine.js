@@ -19,7 +19,16 @@
     let a=0,b=p.length-1; while(a+1<b){const m=(a+b)>>1;if(p[m][0]<=t)a=m;else b=m;}
     return p[a][1]+(t-p[a][0])/(p[b][0]-p[a][0])*(p[b][1]-p[a][1]);
   }
-  function angle(c,t,p) { return c.mode==='sine'?c.amplitudeDeg*Math.sin(2*Math.PI*c.frequencyHz*t):c.mode==='csv'?interpolate(p,t):0; }
+  const multi10Frequencies=Object.freeze([3,7,13,23,43,73,113,179,263,367].map(n=>n/125));
+  function multi10Raw(t) { return multi10Frequencies.reduce((sum,frequency,index)=>
+    sum+(index%2?1:-1)*Math.sin(2*Math.PI*frequency*t)/Math.min(frequency,multi10Frequencies[7]),0); }
+  let multi10Peak=0;
+  for(let i=0;i<=125000;i++)multi10Peak=Math.max(multi10Peak,Math.abs(multi10Raw(i/1000)));
+  function angle(c,t,p) {
+    if(c.mode==='sine')return c.amplitudeDeg*Math.sin(2*Math.PI*c.frequencyHz*t);
+    if(c.mode==='multi10')return (c.amplitudePpDeg/2)*multi10Raw(t)/multi10Peak;
+    return c.mode==='csv'?interpolate(p,t):0;
+  }
   function drawGrid(ctx, width, height) {
     // Thin black horizontal/vertical stripes on white, not alternating tiles.
     // 32 columns over pi metres and 60 rows over six metres: ~10 cm spacing.
@@ -29,6 +38,6 @@
     for(let x=0;x<=32;x++) ctx.fillRect(x*dx-dx*.08,0,dx*.16,height);
     for(let y=0;y<=60;y++) ctx.fillRect(0,y*dy-dy*.08,width,dy*.16);
   }
-  const api={limits,parseCsv,interpolate,angle,drawGrid}; scope.Stimulus=api;
+  const api={limits,parseCsv,interpolate,angle,drawGrid,multi10Frequencies,multi10Peak}; scope.Stimulus=api;
   if(typeof module!=='undefined') module.exports=api;
 })(globalThis);

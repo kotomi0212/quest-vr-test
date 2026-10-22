@@ -48,7 +48,7 @@
   let previewReady = false;
   db.ref('.info/connected').on('value', snap => { $('pcConnection').textContent = snap.val() ? 'PC Firebase: 接続済み' : 'PC Firebase: 切断'; });
   $('retry').onclick = () => location.reload();
-  $('estimateAnkle').onclick = () => { $('ankleCm').value = (Number($('heightCm').value)*.039).toFixed(2); };
+  $('estimateAnkle').onclick = () => { const h=Number($('heightCm').value);$('ankleCm').value=(h*.039).toFixed(1);$('hipCm').value=(h*.53).toFixed(1); };
   function drawWave() {
     try {
       if($('mode').value==='kiemel') {
@@ -57,11 +57,11 @@
         for(let i=0;i<=640;i++){const y=80-KiemelMotion.at(i/640*total,cfg).eyeLinearZ*1000;if(i)ctx.lineTo(i,y);else ctx.moveTo(i,y);}
         ctx.strokeStyle='#165e91';ctx.stroke();$('waveError').textContent='Kiemel：眼位置相当変位（縦軸±8 cm、横軸'+total+'秒）。共通波形から3条件を換算。追加ランプ・速度制限なし。';return;
       }
-      const c={mode:$('mode').value,amplitudeDeg:Number($('amp').value),frequencyHz:Number($('freq').value)};
+      const pp=Number($('amp').value),c={mode:$('mode').value,amplitudeDeg:pp/2,amplitudePpDeg:pp,frequencyHz:Number($('freq').value)};
       const ctx=$('waveform').getContext('2d'); ctx.clearRect(0,0,640,160);ctx.beginPath();
       const duration=Number($('duration').value);
       for(let i=0;i<=640;i++){const a=Stimulus.angle(c,i/640*duration); const y=80-a*3; if(i)ctx.lineTo(i,y);else ctx.moveTo(i,y);}
-      ctx.strokeStyle='#165e91';ctx.stroke(); $('waveError').textContent='指令角度（時間0～'+duration+'秒、縦軸±26.7°）。適用時は開始終了ランプ・速度制限あり';
+      ctx.strokeStyle='#165e91';ctx.stroke(); $('waveError').textContent=($('mode').value==='multi10'?'10周波数: '+Stimulus.multi10Frequencies.map(f=>f.toFixed(3)).join(', ')+' Hz。':'単一sin。')+'指定 '+pp+'° peak-to-peak。適用時は開始終了ランプ・速度制限あり';
     } catch(e){$('waveError').textContent=e.message;}
   }
   $('control').addEventListener('input',drawWave); drawWave();
@@ -82,7 +82,7 @@
   function receive(snap) {
     quest = snap.val();
     const v = quest;
-    if(v?.calibration) { $('measuredEye').textContent='Quest目高: '+v.calibration.measuredEyeHeightM+' m / 足首補正: '+v.calibration.manualAnkleHeightM+' m'+(v.calibration.kiemel?' / l1='+v.calibration.kiemel.l1+' m / l2='+v.calibration.kiemel.l2+' m / 入力眼高との差='+v.calibration.kiemel.inputEyeMinusTrackedEyeM+' m':''); }
+    if(v?.calibration) { $('measuredEye').textContent='Quest目高: '+v.calibration.measuredEyeHeightM+' m / 足関節: '+v.calibration.manualAnkleHeightM+' m / 股関節: '+(v.calibration.manualHipHeightM ?? '-')+' m / 回転中心: '+(v.calibration.rotationCenter || '-')+(v.calibration.kiemel?' / l1='+v.calibration.kiemel.l1+' m / l2='+v.calibration.kiemel.l2+' m / 入力眼高との差='+v.calibration.kiemel.inputEyeMinusTrackedEyeM+' m':''); }
     $('state').textContent = v ? v.status + ' / ' + (v.runId || v.lastRunId || '-') + ' / 適用角度 ' + Number(v.appliedAngleDeg || 0).toFixed(3) + '° / 映像: ' + (StimulusPatterns.get(v.pattern)?.label || v.pattern || '不明')+(v.kiemelCondition?' / '+v.kiemelCondition+' / 前後移動='+Number(v.translationZ||0).toFixed(5)+' m':'')+(v.kiemelPhase?' / '+v.kiemelPhase+' / 経過 '+Number(v.elapsedSeconds||0).toFixed(1)+'秒 / 描画 '+(v.renderedFrames||0)+' frames':'') : 'Quest未接続';
     $('questDiagnostics').textContent = v ?
       `3D: ${v.renderStarted ? '描画中' : '未完了'} / VRボタン: ${v.vrButton ? '生成済み' : '未生成'} / WebXR: ${v.xrSupport || '不明'} / immersive-vr: ${v.immersive ? '開始済み' : '未開始'} / XR描画: ${v.xrPresenting ?? '不明'} / XRセッション: ${v.xrSessionActive ?? '不明'} / A-Frame VR: ${v.aframeVR ?? '不明'} / 位置合わせ: ${v.calibrated ? '完了' : '未完了'} / Firebase: ${v.firebaseState || '不明'} / 受信端末: ${v.client || '不明'} / 接続ID: ${v.instanceId || '-'}${v.startupError ? ' / 起動エラー: ' + v.startupError : ''}` : '';
@@ -124,7 +124,7 @@
     try {
       const isKiemel=$('mode').value==='kiemel'||$('pattern').value==='kiemel-triangles';
       const kcfg=isKiemel&&!safe?readKiemel(['start','calibrate'].includes(type)):null;
-      if (type === 'configure') sendPreview({type,seq:lastSeq=Math.max(Date.now(),lastSeq+1),pattern:$('pattern').value,fixationVisible:$('fixationVisible').checked,...(isKiemel?{protocol:'kiemel',kiemel:kcfg}:{})});
+      if (type === 'configure') sendPreview({type,seq:lastSeq=Math.max(Date.now(),lastSeq+1),pattern:$('pattern').value,fixationVisible:$('fixationVisible').checked,rotationCenter:$('rotationCenter').value,...(isKiemel?{protocol:'kiemel',kiemel:kcfg}:{})});
       if (!freshQuest() && !safe) { tell('Questの接続確認待ちです。Questの画面を確認してください'); return; }
       if (!safe && quest.firebaseState !== '接続済み') { tell('QuestのFirebase接続を確認してください'); return; }
       if (!safe && !quest.renderStarted) { tell('Questの3D描画が未完了です。下の起動エラー・描画状態を確認してください'); return; }
@@ -132,19 +132,19 @@
         tell(`Questの実VRセッションを確認できません（XR描画=${quest.xrPresenting ?? '不明'}、XRセッション=${quest.xrSessionActive ?? '不明'}）。VRボタンを押しても続く場合、下の診断情報を確認してください。別のPC・Questタブが同じ接続先へ状態を送っていないかも確認してください。`); return;
       }
       if (type === 'start' && !quest.calibrated) { tell('PCで立ち位置を合わせてください'); return; }
-      const durationSec = isKiemel&&!safe?kcfg.motion.preSeconds+kcfg.motion.duration+kcfg.motion.postSeconds:Number($('duration').value), frequencyHz = Number($('freq').value), amplitudeDeg = Number($('amp').value);
-      const heightCm = Number($('heightCm').value), eyeHeightM = Number($('eyeCm').value) / 100, ankleHeightM = Number($('ankleCm').value) / 100;
+      const durationSec = isKiemel&&!safe?kcfg.motion.preSeconds+kcfg.motion.duration+kcfg.motion.postSeconds:Number($('duration').value), frequencyHz = Number($('freq').value), amplitudePpDeg = Number($('amp').value), amplitudeDeg=amplitudePpDeg/2;
+      const heightCm = Number($('heightCm').value), eyeHeightM = Number($('eyeCm').value) / 100, ankleHeightM = Number($('ankleCm').value) / 100, hipHeightM=Number($('hipCm').value)/100, rotationCenter=$('rotationCenter').value;
       const mode = type === 'start' && baselineRequest ? 'baseline' : $('mode').value;
-      if (!isKiemel && !safe && type !== 'configure' && (!Number.isFinite(ankleHeightM) || ankleHeightM < 0 || ankleHeightM > .2 ||
-        !Number.isFinite(eyeHeightM) || eyeHeightM < .8 || eyeHeightM > 2.1 || !Number.isFinite(heightCm) || heightCm < 100 || heightCm > 220)) { tell('身長・目・足首の高さが範囲外です'); return; }
+      if (!isKiemel && !safe && type !== 'configure' && (!Number.isFinite(ankleHeightM) || ankleHeightM < 0 || ankleHeightM > .2 || !Number.isFinite(hipHeightM) || hipHeightM < .4 || hipHeightM > 1.4 || hipHeightM <= ankleHeightM || !['ankle','hip'].includes(rotationCenter) ||
+        !Number.isFinite(eyeHeightM) || eyeHeightM < .8 || eyeHeightM > 2.1 || !Number.isFinite(heightCm) || heightCm < 100 || heightCm > 220)) { tell('身長・目・足関節・股関節の高さ、または回転中心が範囲外です'); return; }
       if (!isKiemel && type === 'start' && (!Number.isFinite(durationSec) || durationSec < 5 || durationSec > 600 ||
-        (mode === 'sine' && (!Number.isFinite(frequencyHz) || frequencyHz <= 0 || frequencyHz > 2 || !Number.isFinite(amplitudeDeg) || amplitudeDeg < 0 || amplitudeDeg > 20)))) { tell('刺激設定が範囲外です'); return; }
+        (mode === 'sine' && (!Number.isFinite(frequencyHz) || frequencyHz <= 0 || frequencyHz > 2)) || !Number.isFinite(amplitudePpDeg) || amplitudePpDeg < .1 || amplitudePpDeg > 8)) { tell('刺激設定が範囲外です'); return; }
       const seq = lastSeq = Math.max(Date.now(), lastSeq + 1);
       const command = { type, seq, questInstanceId: quest?.instanceId || null,
         runId: 'trial-' + crypto.randomUUID(), requestedAt: firebase.database.ServerValue.TIMESTAMP };
       if (!safe) {
         if(isKiemel)Object.assign(command,{protocol:'kiemel',mode:baselineRequest?'baseline':'kiemel',pattern:'kiemel-triangles',durationSec,kiemel:kcfg});
-        else Object.assign(command, { heightCm, eyeHeightM, ankleHeightM, mode, frequencyHz, amplitudeDeg, durationSec, pattern:$('pattern').value, fixationVisible:$('fixationVisible').checked });
+        else Object.assign(command, { heightCm, eyeHeightM, ankleHeightM, hipHeightM, rotationCenter, mode, frequencyHz, amplitudeDeg, amplitudePpDeg, durationSec, pattern:$('pattern').value, fixationVisible:$('fixationVisible').checked });
       }
       attempt = { seq, type, received: false }; awaiting = attempt;
       // set() queues writes offline. A reconnect may deliver this later; Quest rejects stale START/calibrate.
@@ -162,6 +162,7 @@
   $('mode').onchange = () => {
     const isK=$('mode').value==='kiemel';$('kiemelControls').hidden=!isK;$('legacyControls').hidden=isK;$('legacyBody').hidden=isK;$('estimateAnkle').hidden=isK;
     if(!isK)legacyMode=$('mode').value;
+    if($('mode').value==='multi10' && Number($('duration').value)===60)$('duration').value=125;
     if(isK)$('pattern').value='kiemel-triangles';else if($('pattern').value==='kiemel-triangles')$('pattern').value='grid';
     updateModeLabel();describePattern();drawWave();return dispatch('configure');
   };
@@ -174,6 +175,7 @@
   $('kiemelRestore').onclick = () => {operatorKiemel=KiemelConfig.restore();populateKiemel();$('mode').value='kiemel';$('pattern').value='kiemel-triangles';updateModeLabel();describePattern();drawWave();return dispatch('configure');};
   $('applyPattern').onclick = () => dispatch('configure');
   $('fixationVisible').onchange = () => dispatch('configure');
+  $('ampPreset').onchange = () => {$('amp').value=$('ampPreset').value;drawWave();};
   $('csvDownload').onclick = async () => { try {
     const logs=(await root.child('logs').get()).val()||{},entries=[];
     for(const user of Object.values(logs))for(const [id,log] of Object.entries(user))entries.push({id,log,columns:log.sampleColumns||((log.samples?.[0]?.length||0)<=2?['elapsed_ms','applied_deg']:['elapsed_ms','applied_deg','commanded_deg','performance_ms','epoch_estimate_ms'])});

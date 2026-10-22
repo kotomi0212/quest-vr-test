@@ -17,6 +17,7 @@
   const patternTextures = new Map();
   let selectedPattern = StimulusPatterns.defaultPattern;
   let fixationVisible = true;
+  let rotationCenter = 'ankle';
   let kiemelConfig=KiemelConfig.clone(KiemelConfig.CONFIG), kiemelModel=null, originInitialized=false;
   const kiemelOrigin=new THREE.Vector3(), kiemelAxis=new THREE.Vector3(1,0,0), kiemelCache=new Map();
   function trackedEyeCenter(target) {
@@ -83,7 +84,9 @@
   const motionAxis=new THREE.Vector3(motionConfig.rotationAxis.x/axisLength,motionConfig.rotationAxis.y/axisLength,motionConfig.rotationAxis.z/axisLength);
   function rotationPivot() {
     if (!['calibrated','fixed'].includes(motionConfig.pivot.mode)) throw Error('motionConfig.pivot.modeが不正です');
-    const base=motionConfig.pivot.mode === 'fixed' ? motionConfig.pivot.positionM : pivot;
+    const calibratedCenter=rotationCenter==='hip' && Number.isFinite(calibration?.manualHipHeightM) ?
+      {x:pivot.x,y:calibration.manualHipHeightM,z:pivot.z} : pivot;
+    const base=motionConfig.pivot.mode === 'fixed' ? motionConfig.pivot.positionM : calibratedCenter;
     const offset=motionConfig.pivot.offsetM;
     const values=[base.x+offset.x,base.y+offset.y,base.z+offset.z];
     if (!values.every(Number.isFinite)) throw Error('回転中心が不正です');
@@ -99,7 +102,7 @@
       return {profile:'Kiemel',...KiemelConfig.clone(kiemelConfig.motion),rotationAxis:[1,0,0],renderAnglePerPaperAngle:-1,positiveDirection:'paper angle positive = forward (-Z); renderer Rx uses negative paper angle',anklePivotLocal:dimensions?[0,-dimensions.H,0]:null,hipPivotLocal:dimensions?[0,-dimensions.l2,0]:null,
         anklePivotWorld:dimensions?[kiemelOrigin.x,kiemelOrigin.y-dimensions.H,kiemelOrigin.z]:null,hipPivotWorld:dimensions?[kiemelOrigin.x,kiemelOrigin.y-dimensions.l2,kiemelOrigin.z]:null,approximationBounds:dimensions?KiemelMotion.bounds(kiemelConfig):null};
     }
-    return { ...JSON.parse(JSON.stringify(motionConfig)), resolvedPivotM:rotationPivot().toArray(), normalizedAxis:motionAxis.toArray() };
+    return { ...JSON.parse(JSON.stringify(motionConfig)), rotationCenter, resolvedPivotM:rotationPivot().toArray(), normalizedAxis:motionAxis.toArray() };
   }
   function patternSettings() {
     if(selectedPattern==='kiemel-triangles')return {profile:'Kiemel-user-specification',generatorVersion:'kiemel-environment-v1',...KiemelConfig.clone(kiemelConfig.pattern),fingerprint:kiemelModel?.fingerprint||null,totalCount:kiemelModel?.count||null};
@@ -274,7 +277,7 @@
       if (active || pending) { block('映像変更はSTOP後に行ってください'); return; }
       if (!StimulusPatterns.get(c.pattern)) { block('映像パターン不正'); return; }
       if(c.pattern==='kiemel-triangles') {try{kiemelConfig=candidateKiemel(c);}catch(e){block(e.message);return;}}
-      else fixationVisible=c.fixationVisible !== false;
+      else {fixationVisible=c.fixationVisible !== false;if(['ankle','hip'].includes(c.rotationCenter))rotationCenter=c.rotationCenter;}
       selectPattern(c.pattern); ack(ready() ? 'ready' : 'connected', { configured: true }); return;
     }
     if (!ready()) { block(rendered() ? 'enter VR before START（immersive-vr未開始）' : '3D描画の初期化が未完了です'); return; }
@@ -293,6 +296,8 @@
       }
       if (!Number.isFinite(c.heightCm) || c.heightCm < 100 || c.heightCm > 220) { block('身長が範囲外です'); return; }
       if (!Number.isFinite(c.ankleHeightM) || c.ankleHeightM < 0 || c.ankleHeightM > 0.2) { block('足首の高さが不正です'); return; }
+      if (!Number.isFinite(c.hipHeightM) || c.hipHeightM < 0.4 || c.hipHeightM > 1.4 || c.hipHeightM <= c.ankleHeightM) { block('股関節の高さが不正です'); return; }
+      if (!['ankle','hip'].includes(c.rotationCenter)) { block('回転中心が不正です'); return; }
       if (c.pattern && !StimulusPatterns.get(c.pattern)) { block('映像パターン不正'); return; }
       const head = new THREE.Vector3();
       if (preview) {
@@ -301,8 +306,8 @@
         scene.renderer.xr.getCamera(scene.camera).getWorldPosition(head);
       }
       pivot.set(head.x, c.ankleHeightM, head.z);
-      fixationVisible=c.fixationVisible !== false;
-      calibration = { heightCm: c.heightCm || null, measuredEyeHeightM: preview ? null : head.y, previewEyeHeightM: preview ? (c.eyeHeightM || 1.5) : null, estimatedAnkleHeightM: (c.heightCm || 160)/100*.039, manualAnkleHeightM: c.ankleHeightM, referenceSpace: 'local-floor requested; verify floor on device', calibratedAtMs: Date.now() };
+      fixationVisible=c.fixationVisible !== false;rotationCenter=c.rotationCenter;
+      calibration = { heightCm: c.heightCm || null, measuredEyeHeightM: preview ? null : head.y, previewEyeHeightM: preview ? (c.eyeHeightM || 1.5) : null, estimatedAnkleHeightM: (c.heightCm || 160)/100*.039, manualAnkleHeightM: c.ankleHeightM, manualHipHeightM:c.hipHeightM, rotationCenter, referenceSpace: 'local-floor requested; verify floor on device', calibratedAtMs: Date.now() };
       calibrated = true; rotate(0); show('位置合わせ完了（足首の前後・左右は頭の真下で近似）');
       selectPattern(c.pattern || 'room');
       ack('ready', { anklePivotM: pivot.toArray(), calibration }); return;
@@ -319,17 +324,19 @@
       resetKiemel();ack('pre-static',{runId:c.runId});return;
     }
     if(c.mode==='kiemel'||c.pattern==='kiemel-triangles'){block('Kiemelのプロトコル指令が必要です');return;}
-    if (!['baseline', 'sine', 'csv'].includes(c.mode) || !Number.isFinite(c.durationSec) || c.durationSec < 5 || c.durationSec > 600 ||
+    if (!['baseline', 'sine', 'multi10', 'csv'].includes(c.mode) || !Number.isFinite(c.durationSec) || c.durationSec < 5 || c.durationSec > 600 ||
       !/^[A-Za-z0-9_-]{1,100}$/.test(c.runId || '') ||
       (c.mode === 'sine' && (!Number.isFinite(c.frequencyHz) || c.frequencyHz <= 0 || c.frequencyHz > 2 ||
-        !Number.isFinite(c.amplitudeDeg) || c.amplitudeDeg < 0 || c.amplitudeDeg > 20))) {
+        !Number.isFinite(c.amplitudeDeg) || c.amplitudeDeg < 0 || c.amplitudeDeg > 4)) ||
+      (c.mode === 'multi10' && (!Number.isFinite(c.amplitudePpDeg) || c.amplitudePpDeg < .1 || c.amplitudePpDeg > 8)) ||
+      !['ankle','hip'].includes(c.rotationCenter)) {
       block('刺激設定が不正です'); return;
     }
     if (active || pending) { block('STOP後に次の条件を開始してください'); return; }
     if (c.mode === 'sine' && 2*Math.PI*c.frequencyHz*c.amplitudeDeg > Stimulus.limits.velocity) { block('角速度上限30°/sを超えます'); return; }
     if (c.pattern && !StimulusPatterns.get(c.pattern)) { block('映像パターン不正'); return; }
     finish('replaced');
-    fixationVisible=c.fixationVisible !== false;
+    fixationVisible=c.fixationVisible !== false;rotationCenter=c.rotationCenter;
     selectPattern(c.pattern || 'room');
     const token = generation;
     const trial = { cmd: { ...c, pattern:selectedPattern }, patternSettings:patternSettings(), layoutSettings:layoutSettings(), motionSettings:motionSettings(), samples: [], pivot: pivot.toArray(), points: null, calibration,

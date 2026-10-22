@@ -43,7 +43,7 @@ const sandbox={window,document,AFRAME:{THREE,registerComponent:(name,c)=>{tick=c
   performance:{now:()=>now,timeOrigin:100000},Date,console,setTimeout:()=>1,clearTimeout(){},setInterval(){},reportStartupError:e=>{throw Error(e);}};
 window.AFRAME=sandbox.AFRAME;
 vm.runInNewContext(fs.readFileSync(require('node:path').join(__dirname,'../quest-runtime.js'),'utf8'),sandbox);
-function command(type,extra={}){events.message({source:parent,origin:'http://test',data:{type:'stimulus-command',command:{type,seq:++seq,runId:'test-'+seq,durationSec:10,mode:'sine',amplitudeDeg:5,velocityDegSec:2,rampSec:.5,holdSec:1,pattern:'grid',heightCm:160,eyeHeightM:1.5,ankleHeightM:.088,...extra}}});}
+function command(type,extra={}){events.message({source:parent,origin:'http://test',data:{type:'stimulus-command',command:{type,seq:++seq,runId:'test-'+seq,durationSec:10,mode:'sine',amplitudeDeg:1,amplitudePpDeg:2,velocityDegSec:2,rampSec:.5,holdSec:1,pattern:'grid',heightCm:160,eyeHeightM:1.5,ankleHeightM:.088,hipHeightM:.9,rotationCenter:'ankle',...extra}}});}
 async function flush(){await Promise.resolve();await Promise.resolve();}
 (async()=>{
  command('calibrate');await flush();
@@ -55,16 +55,20 @@ async function flush(){await Promise.resolve();await Promise.resolve();}
  assert.equal(gridRoom.object3D.visible,true);assert.equal(gridFixation.object3D.visible,true);assert.equal(gridFixation.object3D.position.y,1.5);
  command('configure',{pattern:'grid-room',fixationVisible:false});await flush();assert.equal(gridFixation.object3D.visible,false);
  command('configure',{pattern:'grid'});await flush();
- for(const mode of ['sine']) {
+ for(const mode of ['sine','multi10']) {
   command('start',{mode,frequencyHz:.2});await flush();
   now+=3001;tick();
   for(let i=0;i<150;i++){now+=10;tick();}
-  assert(world.object3D.rotation.x>.01,mode+' must move in production tick');
+  assert(Math.abs(world.object3D.rotation.x)>.0001,mode+' must move in production tick');
   command('return');await flush();
   const startAngle=world.object3D.rotation.x;
-  now+=1000;tick(); assert(world.object3D.rotation.x>0 && world.object3D.rotation.x<startAngle);
+  now+=1000;tick(); assert(Math.abs(world.object3D.rotation.x)<Math.abs(startAngle));
   now+=1000;tick(); assert.equal(world.object3D.rotation.x,0);
  }
+ command('start',{mode:'sine',frequencyHz:.2,rotationCenter:'hip'});await flush();now+=3001;tick();for(let i=0;i<100;i++){now+=10;tick();}
+ const hipCenter=new Vector3(0,.9,0);
+ const transformedHip=hipCenter.clone().applyAxisAngle(new Vector3(1,0,0),world.object3D.rotation.x);transformedHip.set(transformedHip.x+world.object3D.position.x,transformedHip.y+world.object3D.position.y,transformedHip.z+world.object3D.position.z);
+ assert(Math.hypot(transformedHip.x,transformedHip.y-.9,transformedHip.z)<1e-9,'Hip pivot must remain invariant');command('emergency');await flush();
  command('start',{mode:'csv',csvFile:'test.csv',csvPoints:[[0,0],[2,4],[10,0]]});await flush();
  now+=3001;tick();for(let i=0;i<100;i++){now+=10;tick();}
  assert(world.object3D.rotation.x>0);command('emergency');await flush();assert.equal(world.object3D.rotation.x,0);
@@ -101,13 +105,13 @@ async function flush(){await Promise.resolve();await Promise.resolve();}
  vm.runInContext(fs.readFileSync(require('node:path').join(__dirname,'../quest-runtime.js'),'utf8'),ctx);
  events.load();for(let i=0;i<30;i++)await flush();
  const fixture=window.fixture, commandPath='sessions/test/command';
- function headset(type,extra={}){fixture.emit(commandPath,{type,seq:++seq,questInstanceId:fixture.lastStatus().instanceId,requestedAt:Date.now(),pattern:'grid',heightCm:160,ankleHeightM:.088,...extra});}
+ function headset(type,extra={}){fixture.emit(commandPath,{type,seq:++seq,questInstanceId:fixture.lastStatus().instanceId,requestedAt:Date.now(),pattern:'grid',heightCm:160,ankleHeightM:.088,hipHeightM:.9,rotationCenter:'ankle',...extra});}
  headset('configure');await flush();assert.equal(fixture.lastStatus().configured,true);assert.equal(fixture.lastStatus().immersive,false);
  headset('calibrate');await flush();assert.equal(fixture.lastStatus().status,'blocked');
  scene.renderer.xr.isPresenting=true;scene.renderer.xr.getSession=()=>({addEventListener(){}});
  scene.renderer.xr.getCamera=()=>({getWorldPosition:head=>head.set(0,1.6,0)});
  headset('calibrate');await flush();assert.equal(fixture.lastStatus().calibrated,true);assert.equal(fixture.lastStatus().immersive,true);assert.equal(fixture.lastStatus().aframeVR,false);
- headset('start',{pattern:'noise-1f',mode:'sine',frequencyHz:.2,amplitudeDeg:5,durationSec:5,runId:'test-pattern-log'});await flush();
+ headset('start',{pattern:'noise-1f',mode:'sine',frequencyHz:.2,amplitudeDeg:1,amplitudePpDeg:2,durationSec:5,runId:'test-pattern-log'});await flush();
  now+=3001;tick();now+=100;tick();headset('emergency');await flush();
  const log=fixture.writes.find(w=>w.path.endsWith('/logs/test-quest/test-pattern-log'))?.value;
  assert(log,'Pattern trial must produce a log');assert.equal(log.pattern,'noise-1f');

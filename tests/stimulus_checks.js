@@ -4,6 +4,8 @@ const fs = require('node:fs');
 const path = require('node:path');
 const S = require('../stimulus-engine.js');
 assert.equal(S.trap,undefined);assert.equal(S.angle({mode:'sine',amplitudeDeg:5,frequencyHz:.2},1.25),5);
+const multiSamples=Array.from({length:125001},(_,i)=>S.angle({mode:'multi10',amplitudePpDeg:2},i/1000));
+assert.equal(S.multi10Frequencies.length,10);assert(Math.abs(multiSamples.reduce((a,b)=>Math.max(a,b),-Infinity)-1)<.01);assert(Math.abs(multiSamples.reduce((a,b)=>Math.min(a,b),Infinity)+1)<.01);
 const points=S.parseCsv('time_s,angle_deg\n0,0\n1,2\n2,0');
 assert.equal(S.interpolate(points,.5),1); assert.equal(S.interpolate(points,1.5),1);
 for(const bad of ['0,1\n1,0','0,0\n0,1','0,0\n.01,1','0,0\n1,21','0,0\n1,NaN']) assert.throws(()=>S.parseCsv(bad));
@@ -16,4 +18,4 @@ for(const file of ['quest.html','operator.html']) {
  const html=fs.readFileSync(path.join(__dirname,'..',file),'utf8');
  for(const match of html.matchAll(/src="([^"?]+)(?:\?[^\"]*)?"/g)) if(!/^https?:/.test(match[1])) assert(fs.existsSync(path.join(__dirname,'..',match[1])),match[1]);
 }
-console.log('PASS: sine, CSV interpolation/limits, example CSV, pivot invariance, local script paths');
+console.log('PASS: sine, normalized 10-frequency stimulus, CSV interpolation/limits, pivot invariance, local script paths');

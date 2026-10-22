@@ -99,8 +99,8 @@ class BrowserChecks(unittest.TestCase):
     def command(self, kind, **overrides):
         command = self.page.evaluate('''kind => ({type:kind,seq:++fixture.seq+Date.now(),
             questInstanceId:fixture.lastStatus().instanceId,requestedAt:Date.now(),
-            runId:'test-'+crypto.randomUUID(),mode:'sine',durationSec:5,frequencyHz:.2,amplitudeDeg:5,
-            heightCm:160,eyeHeightM:1.5,ankleHeightM:.08,csvFile:'demo_not_ghiasi_trapv.csv'})''', kind)
+            runId:'test-'+crypto.randomUUID(),mode:'sine',durationSec:5,frequencyHz:.2,amplitudeDeg:1,amplitudePpDeg:2,
+            heightCm:160,eyeHeightM:1.5,ankleHeightM:.08,hipHeightM:.9,rotationCenter:'ankle',csvFile:'demo_not_ghiasi_trapv.csv'})''', kind)
         command.update(overrides)
         self.page.evaluate('c=>fixture.emit(fixture.commandPath,c)', command)
         return command
