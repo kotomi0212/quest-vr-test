@@ -71,7 +71,8 @@
       if (type !== 'stop' && (!Number.isFinite(ankleHeightM) || ankleHeightM < 0 || ankleHeightM > .2 ||
         !Number.isFinite(eyeHeightM) || eyeHeightM < .8 || eyeHeightM > 2.1 || !Number.isFinite(heightCm) || heightCm < 100 || heightCm > 220)) { tell('身長・目・足首の高さが範囲外です'); return; }
       if (type === 'start' && (!Number.isFinite(durationSec) || durationSec < 5 || durationSec > 600 ||
-        (mode === 'sine' && (!Number.isFinite(frequencyHz) || frequencyHz <= 0 || frequencyHz > 2 || !Number.isFinite(amplitudeDeg) || amplitudeDeg < 0 || amplitudeDeg > 20)))) { tell('刺激設定が範囲外です'); return; }
+        (mode === 'sine' && (!Number.isFinite(frequencyHz) || frequencyHz <= 0 || frequencyHz > 2)) ||
+        (['sine', 'pink'].includes(mode) && (!Number.isFinite(amplitudeDeg) || amplitudeDeg < 0 || amplitudeDeg > 20)))) { tell('刺激設定が範囲外です'); return; }
       const seq = lastSeq = Math.max(Date.now(), lastSeq + 1);
       const command = { type, seq, questInstanceId: quest?.instanceId || null,
         runId: 'trial-' + crypto.randomUUID(), requestedAt: firebase.database.ServerValue.TIMESTAMP };

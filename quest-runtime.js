@@ -108,6 +108,36 @@
     while (a + 1 < b) { const m = (a + b) >> 1; if (points[m][0] <= time) a = m; else b = m; }
     return points[a][1] + (time - points[a][0]) / (points[b][0] - points[a][0]) * (points[b][1] - points[a][1]);
   }
+  function hashSeed(text) {
+    let value = 2166136261;
+    for (const char of text) { value ^= char.charCodeAt(0); value = Math.imul(value, 16777619); }
+    return value >>> 0;
+  }
+  function seededRandom(seed) {
+    let state = seed || 1;
+    return () => {
+      state = (state + 0x6D2B79F5) | 0;
+      let x = state;
+      x = Math.imul(x ^ x >>> 15, x | 1); x ^= x + Math.imul(x ^ x >>> 7, x | 61);
+      return ((x ^ x >>> 14) >>> 0) / 4294967296;
+    };
+  }
+  // Random-phase Fourier synthesis: component power is proportional to 1/f.
+  function makePinkNoise(durationSec, peakDeg, seedText) {
+    const df = 1 / durationSec, maxHz = 1;
+    const random = seededRandom(hashSeed(seedText));
+    const components = [];
+    for (let frequency = df; frequency <= maxHz + df / 2; frequency += df) {
+      components.push({ frequency, weight: 1 / Math.sqrt(frequency), phase: random() * 2 * Math.PI });
+    }
+    const raw = time => components.reduce((sum, part) =>
+      sum + part.weight * Math.sin(2 * Math.PI * part.frequency * time + part.phase), 0);
+    let maxAbs = 0;
+    for (let i = 0; i <= Math.ceil(durationSec * 90); i++) maxAbs = Math.max(maxAbs, Math.abs(raw(i / 90)));
+    const scale = maxAbs ? peakDeg / maxAbs : 0;
+    return { angle: time => raw(time) * scale, seed: hashSeed(seedText), minHz: df,
+      maxHz, components: components.length };
+  }
   function block(error) { show(error); ack('blocked', { error }); }
   async function command(c) {
     if (!c || !Number.isSafeInteger(c.seq)) return;
@@ -142,16 +172,23 @@
     }
     if (c.type !== 'start') return;
     if (!calibrated) { block('PCで立ち位置合わせが必要です'); return; }
-    if (!['baseline', 'sine', 'csv'].includes(c.mode) || !Number.isFinite(c.durationSec) || c.durationSec < 5 || c.durationSec > 600 ||
+    if (!['baseline', 'sine', 'pink', 'csv'].includes(c.mode) || !Number.isFinite(c.durationSec) || c.durationSec < 5 || c.durationSec > 600 ||
       !/^[A-Za-z0-9_-]{1,100}$/.test(c.runId || '') ||
       (c.mode === 'sine' && (!Number.isFinite(c.frequencyHz) || c.frequencyHz <= 0 || c.frequencyHz > 2 ||
-        !Number.isFinite(c.amplitudeDeg) || c.amplitudeDeg < 0 || c.amplitudeDeg > 20))) {
+        !Number.isFinite(c.amplitudeDeg) || c.amplitudeDeg < 0 || c.amplitudeDeg > 20)) ||
+      (c.mode === 'pink' && (!Number.isFinite(c.amplitudeDeg) || c.amplitudeDeg < 0 || c.amplitudeDeg > 20))) {
       block('刺激設定が不正です'); return;
     }
     finish('replaced');
     const token = generation;
-    const trial = { cmd: { ...c }, samples: [], pivot: pivot.toArray(), points: null,
+    const trial = { cmd: { ...c }, samples: [], pivot: pivot.toArray(), points: null, pink: null,
       startedPerf: null, startedWallMs: null, preludePerf: null };
+    if (c.mode === 'pink') {
+      trial.pink = makePinkNoise(c.durationSec, c.amplitudeDeg, c.runId);
+      Object.assign(trial.cmd, { noiseSeed: trial.pink.seed, noiseMinHz: trial.pink.minHz,
+        noiseMaxHz: trial.pink.maxHz, noiseComponents: trial.pink.components,
+        spectrum: 'power proportional to 1/f' });
+    }
     if (preview) {
       scene.querySelector('a-camera').setAttribute('position', { x: 0, y: c.eyeHeightM || 1.5, z: 0 });
       pivot.set(0, c.ankleHeightM || 0, 0); trial.pivot = pivot.toArray();
@@ -186,6 +223,7 @@
       const t = (now - active.startedPerf) / 1000, c = active.cmd;
       if (t >= c.durationSec) { finish(); return; }
       const degrees = c.mode === 'sine' ? c.amplitudeDeg * Math.sin(2 * Math.PI * c.frequencyHz * t) :
+        c.mode === 'pink' ? active.pink.angle(t) :
         c.mode === 'csv' ? interpolate(active.points, t) : 0;
       rotate(degrees); active.samples.push([Math.round(t * 1000), Math.round(degrees * 100000) / 100000]);
     }

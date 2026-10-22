@@ -113,7 +113,11 @@ window.addEventListener('unhandledrejection',e=>reportStartupError([e.reason?.me
     <a-entity light="type: ambient; intensity: 0.85; color: #fff5e6"></a-entity>
     <a-entity light="type: directional; intensity: 0.65" position="-2 3 1"></a-entity>
   </a-entity>
-  <a-entity position="0 0 0"><a-camera wasd-controls="enabled: false" look-controls="enabled: true"></a-camera></a-entity>
+  <a-entity position="0 0 0"><a-camera wasd-controls="enabled: false" look-controls="enabled: true">
+    <!-- Head-locked fixation point: centered and independent from the rotating room. -->
+    <a-circle id="fixation-point" position="0 0 -2" radius="0.018" color="#e32636"
+      material="shader: flat; depthTest: false; depthWrite: false" render-order="999"></a-circle>
+  </a-camera></a-entity>
 </a-scene>
 </template>
 <script defer src="quest-runtime.js"></script>

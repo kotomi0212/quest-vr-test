@@ -162,6 +162,32 @@ class BrowserChecks(unittest.TestCase):
         self.assertEqual(log['anklePivotM'], [1, 0, 2])
         self.assertEqual(self.errors, [])
 
+    def test_pink_noise_fixation_and_ankle_pivot(self):
+        self.quest(); self.calibrated()
+        self.command('start', mode='pink', durationSec=5, amplitudeDeg=6)
+        self.page.wait_for_function("fixture.lastStatus().status==='running'", timeout=10000)
+        self.page.wait_for_function("Math.abs(document.querySelector('#visual-world').object3D.rotation.x)>.002")
+        result = self.page.evaluate('''()=>{
+          const room=document.querySelector('#visual-world').object3D;
+          const pivot=new AFRAME.THREE.Vector3(0,.08,0);
+          const fixation=document.querySelector('#fixation-point');
+          return {
+            pivotError:pivot.clone().applyEuler(room.rotation).add(room.position).distanceTo(pivot),
+            fixationParent:fixation.parentElement.tagName.toLowerCase(),
+            fixationInsideWorld:!!fixation.closest('#visual-world')
+          };
+        }''')
+        self.assertLess(result['pivotError'], 1e-8)
+        self.assertEqual(result['fixationParent'], 'a-camera')
+        self.assertFalse(result['fixationInsideWorld'])
+        self.command('stop')
+        log = self.page.evaluate("fixture.writes.filter(w=>w.path.includes('/logs/')).at(-1).value")
+        self.assertEqual(log['mode'], 'pink')
+        self.assertEqual(log['spectrum'], 'power proportional to 1/f')
+        self.assertGreaterEqual(log['noiseComponents'], 5)
+        self.assertTrue(all(abs(sample[1]) <= 6.05 for sample in log['samples']))
+        self.assertEqual(self.errors, [])
+
     def hold_csv(self):
         # Defer fulfillment while the page can process a subsequent STOP/VR exit.
         self.held = []
