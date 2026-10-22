@@ -9,7 +9,8 @@ assert.equal(S.multi10Frequencies.length,10);assert(Math.abs(multiSamples.reduce
 assert.equal(S.multi10AmplitudeExponent,1.5);
 const velocities=multiSamples.slice(1).map((value,i)=>(value-multiSamples[i])*1000);
 const accelerations=velocities.slice(1).map((value,i)=>(value-velocities[i])*1000);
-assert(Math.max(...velocities.map(Math.abs))<.3);assert(Math.max(...accelerations.map(Math.abs))<.7);
+assert(velocities.reduce((maximum,value)=>Math.max(maximum,Math.abs(value)),0)<.3);
+assert(accelerations.reduce((maximum,value)=>Math.max(maximum,Math.abs(value)),0)<.7);
 const points=S.parseCsv('time_s,angle_deg\n0,0\n1,2\n2,0');
 assert.equal(S.interpolate(points,.5),1); assert.equal(S.interpolate(points,1.5),1);
 for(const bad of ['0,1\n1,0','0,0\n0,1','0,0\n.01,1','0,0\n1,21','0,0\n1,NaN']) assert.throws(()=>S.parseCsv(bad));

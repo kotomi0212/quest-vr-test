@@ -105,7 +105,8 @@
     }
     const eyeHeight=calibration?.measuredEyeHeightM ?? calibration?.previewEyeHeightM ?? null;
     const eyeAboveAnkleM=Number.isFinite(eyeHeight)?eyeHeight-pivot.y:null;
-    return { ...JSON.parse(JSON.stringify(motionConfig)), rotationCenter, resolvedPivotM:rotationPivot().toArray(), normalizedAxis:motionAxis.toArray(),
+    const resolvedPivotM=rotationCenter==='translation'?pivot.toArray():rotationPivot().toArray();
+    return { ...JSON.parse(JSON.stringify(motionConfig)), rotationCenter, resolvedPivotM, normalizedAxis:motionAxis.toArray(),
       ...(rotationCenter==='translation'?{translationModel:'Kiemel small-angle equivalence: z=-H*theta',eyeAboveAnkleM,referenceAngle:'ankle-equivalent radians'}:{}) };
   }
   function patternSettings() {
@@ -218,7 +219,7 @@
     const room = scene.querySelector('#visual-world');
     if (!room?.object3D) return;
     // 将来の回転適用を変更する入口。配置の初期姿勢とは別に親全体を動かす。
-    const angle=THREE.MathUtils.degToRad(degrees), center=rotationPivot();
+    const angle=THREE.MathUtils.degToRad(degrees);
     if(rotationCenter==='translation') {
       room.object3D.setRotationFromAxisAngle(motionAxis,0);
       if(angle===0){room.object3D.position.set(0,0,0);return 0;}
@@ -228,6 +229,7 @@
       room.object3D.position.set(0,0,-H*angle);
       return -H*angle;
     }
+    const center=rotationPivot();
     room.object3D.setRotationFromAxisAngle(motionAxis,angle);
     const rotated=center.clone().applyAxisAngle(motionAxis,angle);
     room.object3D.position.copy(center).sub(rotated);

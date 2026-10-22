@@ -56,6 +56,7 @@ async function flush(){await Promise.resolve();await Promise.resolve();}
  command('configure',{pattern:'grid-room',fixationVisible:false});await flush();assert.equal(gridFixation.object3D.visible,false);
  command('configure',{pattern:'noise-room',fixationVisible:true});await flush();
  assert.equal(noiseRoom.object3D.visible,true);assert.equal(gridRoom.object3D.visible,false);assert.equal(noiseFixation.object3D.visible,true);assert.equal(noiseFixation.object3D.position.y,1.5);
+ command('configure',{pattern:'grid-room',rotationCenter:'translation'});await flush();assert.equal(gridRoom.object3D.visible,true);
  command('configure',{pattern:'grid'});await flush();
  for(const mode of ['sine','multi10']) {
   command('start',{mode,frequencyHz:.2});await flush();
