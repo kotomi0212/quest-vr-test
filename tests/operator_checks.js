@@ -21,6 +21,7 @@ listeners['sessions/test/status']({val:()=>({instanceId:'quest',at:Date.now(),fi
  nodes.mode.value='sine';await nodes.start.onclick();assert.equal(writes.at(-1).mode,'sine');
  nodes.mode.value='multi10';await nodes.mode.onchange();await nodes.start.onclick();assert.equal(writes.at(-1).mode,'multi10');assert.equal(writes.at(-1).amplitudePpDeg,2);
  nodes.rotationCenter.value='hip';await nodes.start.onclick();assert.equal(writes.at(-1).rotationCenter,'hip');assert.equal(writes.at(-1).hipHeightM,.9);
+ nodes.rotationCenter.value='translation';await nodes.start.onclick();assert.equal(writes.at(-1).rotationCenter,'translation');
  nodes.mode.value='sine';nodes.rotationCenter.value='ankle';
  await nodes.baseline.onclick();assert.equal(writes.at(-1).mode,'baseline');assert.equal(nodes.mode.value,'sine');
  await nodes.stop.onclick();assert.equal(writes.at(-1).type,'return');

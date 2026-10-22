@@ -71,6 +71,10 @@ async function flush(){await Promise.resolve();await Promise.resolve();}
  const hipCenter=new Vector3(0,.9,0);
  const transformedHip=hipCenter.clone().applyAxisAngle(new Vector3(1,0,0),world.object3D.rotation.x);transformedHip.set(transformedHip.x+world.object3D.position.x,transformedHip.y+world.object3D.position.y,transformedHip.z+world.object3D.position.z);
  assert(Math.hypot(transformedHip.x,transformedHip.y-.9,transformedHip.z)<1e-9,'Hip pivot must remain invariant');command('emergency');await flush();
+ command('start',{mode:'sine',frequencyHz:.2,rotationCenter:'translation'});await flush();now+=3001;tick();for(let i=0;i<100;i++){now+=10;tick();}
+ assert.equal(world.object3D.rotation.x,0,'Translation must not rotate the room');
+ assert(Math.abs(world.object3D.position.z+(1.5-.088)*(Math.PI/180)*Math.sin(2*Math.PI*.2*1)/1.5)<.001,'Translation must use eye-above-ankle times ankle-reference angle');
+ command('emergency');await flush();assert.equal(world.object3D.position.z,0);
  command('start',{mode:'csv',csvFile:'test.csv',csvPoints:[[0,0],[2,4],[10,0]]});await flush();
  now+=3001;tick();for(let i=0;i<100;i++){now+=10;tick();}
  assert(world.object3D.rotation.x>0);command('emergency');await flush();assert.equal(world.object3D.rotation.x,0);

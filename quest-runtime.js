@@ -103,7 +103,10 @@
       return {profile:'Kiemel',...KiemelConfig.clone(kiemelConfig.motion),rotationAxis:[1,0,0],renderAnglePerPaperAngle:-1,positiveDirection:'paper angle positive = forward (-Z); renderer Rx uses negative paper angle',anklePivotLocal:dimensions?[0,-dimensions.H,0]:null,hipPivotLocal:dimensions?[0,-dimensions.l2,0]:null,
         anklePivotWorld:dimensions?[kiemelOrigin.x,kiemelOrigin.y-dimensions.H,kiemelOrigin.z]:null,hipPivotWorld:dimensions?[kiemelOrigin.x,kiemelOrigin.y-dimensions.l2,kiemelOrigin.z]:null,approximationBounds:dimensions?KiemelMotion.bounds(kiemelConfig):null};
     }
-    return { ...JSON.parse(JSON.stringify(motionConfig)), rotationCenter, resolvedPivotM:rotationPivot().toArray(), normalizedAxis:motionAxis.toArray() };
+    const eyeHeight=calibration?.measuredEyeHeightM ?? calibration?.previewEyeHeightM ?? null;
+    const eyeAboveAnkleM=Number.isFinite(eyeHeight)?eyeHeight-pivot.y:null;
+    return { ...JSON.parse(JSON.stringify(motionConfig)), rotationCenter, resolvedPivotM:rotationPivot().toArray(), normalizedAxis:motionAxis.toArray(),
+      ...(rotationCenter==='translation'?{translationModel:'Kiemel small-angle equivalence: z=-H*theta',eyeAboveAnkleM,referenceAngle:'ankle-equivalent radians'}:{}) };
   }
   function patternSettings() {
     if(selectedPattern==='kiemel-triangles')return {profile:'Kiemel-user-specification',generatorVersion:'kiemel-environment-v1',...KiemelConfig.clone(kiemelConfig.pattern),fingerprint:kiemelModel?.fingerprint||null,totalCount:kiemelModel?.count||null};
@@ -216,9 +219,19 @@
     if (!room?.object3D) return;
     // 将来の回転適用を変更する入口。配置の初期姿勢とは別に親全体を動かす。
     const angle=THREE.MathUtils.degToRad(degrees), center=rotationPivot();
+    if(rotationCenter==='translation') {
+      room.object3D.setRotationFromAxisAngle(motionAxis,0);
+      if(angle===0){room.object3D.position.set(0,0,0);return 0;}
+      const eyeHeight=calibration?.measuredEyeHeightM ?? calibration?.previewEyeHeightM;
+      const H=eyeHeight-pivot.y;
+      if(!Number.isFinite(H)||H<=0)throw Error('並進換算に必要な眼―足関節間の高さが不正です');
+      room.object3D.position.set(0,0,-H*angle);
+      return -H*angle;
+    }
     room.object3D.setRotationFromAxisAngle(motionAxis,angle);
     const rotated=center.clone().applyAxisAngle(motionAxis,angle);
     room.object3D.position.copy(center).sub(rotated);
+    return 0;
   }
   function cancelPending() {
     generation++;
@@ -234,7 +247,7 @@
     if (preview || !root || !user) return;
     const c = trial.cmd;
     const payload = { ...c, reason, startedAtQuestWallClockMs: trial.startedWallMs,
-      endedAtQuestWallClockMs: Date.now(), anklePivotM: trial.pivot, calibration: trial.calibration, patternSettings: trial.patternSettings, layoutSettings:trial.layoutSettings, motionSettings:trial.motionSettings, timeOriginMs: performance.timeOrigin, serverOffsetMs: serverOffset, sampleColumns: ['elapsed_ms','applied_deg','commanded_deg','performance_ms','epoch_estimate_ms'],
+      endedAtQuestWallClockMs: Date.now(), anklePivotM: trial.pivot, calibration: trial.calibration, patternSettings: trial.patternSettings, layoutSettings:trial.layoutSettings, motionSettings:trial.motionSettings, timeOriginMs: performance.timeOrigin, serverOffsetMs: serverOffset, sampleColumns: ['elapsed_ms','applied_deg','commanded_deg','performance_ms','epoch_estimate_ms','translation_z_m'],
       samples: trial.samples,
       note: 'Software transforms, not measured photon output. Quest wall-clock timestamps are not synchronized with external sensors.' };
     if(trial.kiemel) {
@@ -296,7 +309,7 @@
       if (active || pending) { block('映像変更はSTOP後に行ってください'); return; }
       if (!StimulusPatterns.get(c.pattern)) { block('映像パターン不正'); return; }
       if(c.pattern==='kiemel-triangles') {try{kiemelConfig=candidateKiemel(c);}catch(e){block(e.message);return;}}
-      else {fixationVisible=c.fixationVisible !== false;if(['ankle','hip'].includes(c.rotationCenter))rotationCenter=c.rotationCenter;}
+      else {fixationVisible=c.fixationVisible !== false;if(['ankle','hip','translation'].includes(c.rotationCenter))rotationCenter=c.rotationCenter;}
       selectPattern(c.pattern); ack(ready() ? 'ready' : 'connected', { configured: true }); return;
     }
     if (!ready()) { block(rendered() ? 'enter VR before START（immersive-vr未開始）' : '3D描画の初期化が未完了です'); return; }
@@ -316,7 +329,7 @@
       if (!Number.isFinite(c.heightCm) || c.heightCm < 100 || c.heightCm > 220) { block('身長が範囲外です'); return; }
       if (!Number.isFinite(c.ankleHeightM) || c.ankleHeightM < 0 || c.ankleHeightM > 0.2) { block('足首の高さが不正です'); return; }
       if (!Number.isFinite(c.hipHeightM) || c.hipHeightM < 0.4 || c.hipHeightM > 1.4 || c.hipHeightM <= c.ankleHeightM) { block('股関節の高さが不正です'); return; }
-      if (!['ankle','hip'].includes(c.rotationCenter)) { block('回転中心が不正です'); return; }
+      if (!['ankle','hip','translation'].includes(c.rotationCenter)) { block('運動条件が不正です'); return; }
       if (c.pattern && !StimulusPatterns.get(c.pattern)) { block('映像パターン不正'); return; }
       const head = new THREE.Vector3();
       if (preview) {
@@ -348,7 +361,7 @@
       (c.mode === 'sine' && (!Number.isFinite(c.frequencyHz) || c.frequencyHz <= 0 || c.frequencyHz > 2 ||
         !Number.isFinite(c.amplitudeDeg) || c.amplitudeDeg < 0 || c.amplitudeDeg > 4)) ||
       (c.mode === 'multi10' && (!Number.isFinite(c.amplitudePpDeg) || c.amplitudePpDeg < .1 || c.amplitudePpDeg > 8)) ||
-      !['ankle','hip'].includes(c.rotationCenter)) {
+      !['ankle','hip','translation'].includes(c.rotationCenter)) {
       block('刺激設定が不正です'); return;
     }
     if (active || pending) { block('STOP後に次の条件を開始してください'); return; }
@@ -397,8 +410,8 @@
       }
       if (active.returning) {
         const u=Math.min(1,(now-active.returning.at)/2000);
-        const deg=active.returning.angle*(1-u*u*(3-2*u)); rotate(deg);
-        active.samples.push([(now-active.startedPerf),deg,0,now,performance.timeOrigin+now]);
+        const deg=active.returning.angle*(1-u*u*(3-2*u)),translationZ=rotate(deg);
+        active.samples.push([(now-active.startedPerf),deg,0,now,performance.timeOrigin+now,translationZ]);
         if(u===1) finish('stopped'); return;
       }
       const t = (now - active.startedPerf) / 1000, c = active.cmd;
@@ -409,7 +422,7 @@
       const target = commanded * Math.min(1, t / 1.5, Math.max(0, (c.durationSec - t) / 1.5));
       const degrees = previous + Math.max(-30 * dt, Math.min(30 * dt, target - previous));
       active.lastFrame = now; active.actualAngle = degrees;
-      rotate(degrees); active.samples.push([Math.round(t * 1000), Math.round(degrees * 100000) / 100000, commanded, now, performance.timeOrigin + now]);
+      const translationZ=rotate(degrees); active.samples.push([Math.round(t * 1000), Math.round(degrees * 100000) / 100000, commanded, now,performance.timeOrigin + now,translationZ]);
     }
   });
   if (preview) {

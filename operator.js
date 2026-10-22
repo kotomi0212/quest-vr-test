@@ -110,7 +110,7 @@
       if (subscribed) root.child('status').off('value', receive);
       subscribed = false; quest = null; previewReady = false; $('preview').removeAttribute('src'); return;
     }
-    if (!$('preview').getAttribute('src')) $('preview').src = 'quest.html?preview=1&v=20261022-noiseroom2';
+    if (!$('preview').getAttribute('src')) $('preview').src = 'quest.html?preview=1&v=20261022-translation1';
     if (!subscribed) { subscribed = true; root.child('status').on('value', receive, error => tell('Quest状態の購読エラー: ' + error.message)); }
   });
   setInterval(() => {
@@ -137,7 +137,7 @@
       const durationSec = isKiemel&&!safe?kcfg.motion.preSeconds+kcfg.motion.duration+kcfg.motion.postSeconds:Number($('duration').value), frequencyHz = Number($('freq').value), amplitudePpDeg = Number($('amp').value), amplitudeDeg=amplitudePpDeg/2;
       const heightCm = Number($('heightCm').value), eyeHeightM = Number($('eyeCm').value) / 100, ankleHeightM = Number($('ankleCm').value) / 100, hipHeightM=Number($('hipCm').value)/100, rotationCenter=$('rotationCenter').value;
       const mode = type === 'start' && baselineRequest ? 'baseline' : $('mode').value;
-      if (!isKiemel && !safe && type !== 'configure' && (!Number.isFinite(ankleHeightM) || ankleHeightM < 0 || ankleHeightM > .2 || !Number.isFinite(hipHeightM) || hipHeightM < .4 || hipHeightM > 1.4 || hipHeightM <= ankleHeightM || !['ankle','hip'].includes(rotationCenter) ||
+      if (!isKiemel && !safe && type !== 'configure' && (!Number.isFinite(ankleHeightM) || ankleHeightM < 0 || ankleHeightM > .2 || !Number.isFinite(hipHeightM) || hipHeightM < .4 || hipHeightM > 1.4 || hipHeightM <= ankleHeightM || !['ankle','hip','translation'].includes(rotationCenter) ||
         !Number.isFinite(eyeHeightM) || eyeHeightM < .8 || eyeHeightM > 2.1 || !Number.isFinite(heightCm) || heightCm < 100 || heightCm > 220)) { tell('身長・目・足関節・股関節の高さ、または回転中心が範囲外です'); return; }
       if (!isKiemel && type === 'start' && (!Number.isFinite(durationSec) || durationSec < 5 || durationSec > 600 ||
         (mode === 'sine' && (!Number.isFinite(frequencyHz) || frequencyHz <= 0 || frequencyHz > 2)) || !Number.isFinite(amplitudePpDeg) || amplitudePpDeg < .1 || amplitudePpDeg > 8)) { tell('刺激設定が範囲外です'); return; }
