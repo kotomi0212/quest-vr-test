@@ -23,6 +23,16 @@ window.addEventListener('unhandledrejection',e=>reportStartupError([e.reason?.me
 <a-scene webxr="referenceSpaceType: local-floor" stimulus-driver background="color: #e8eef7" xr-mode-ui="enabled: true">
   <!-- Approximate modern room: dimensions and furnishings are design choices, not recovered from the paper. Origin = ankle/floor. -->
   <a-entity id="visual-world">
+    <a-entity id="grid-room-pattern" visible="false">
+      <a-plane position="0 0 0" rotation="-90 0 0" width="8" height="8" material="src: url(grid.svg); shader: flat; repeat: 8 8"></a-plane>
+      <a-plane position="0 4 0" rotation="90 0 0" width="8" height="8" material="src: url(grid.svg); shader: flat; repeat: 8 8"></a-plane>
+      <a-plane position="0 2 -4" width="8" height="4" material="src: url(grid.svg); shader: flat; repeat: 8 4"></a-plane>
+      <a-plane position="0 2 4" rotation="0 180 0" width="8" height="4" material="src: url(grid.svg); shader: flat; repeat: 8 4"></a-plane>
+      <a-plane position="-4 2 0" rotation="0 90 0" width="8" height="4" material="src: url(grid.svg); shader: flat; repeat: 8 4"></a-plane>
+      <a-plane position="4 2 0" rotation="0 -90 0" width="8" height="4" material="src: url(grid.svg); shader: flat; repeat: 8 4"></a-plane>
+      <a-circle id="fixation-point" position="0 1.5 -3.98" radius="0.025" color="#e32636"
+        material="shader: flat; depthTest: false; depthWrite: false"></a-circle>
+    </a-entity>
     <a-entity id="room-pattern">
     <a-box position="0 -0.06 -3" width="10" height="0.12" depth="12" color="#b59b7c"></a-box>
     <a-box position="0 3.5 -3" width="10" height="0.1" depth="12" color="#f0eee9"></a-box>
@@ -119,15 +129,11 @@ window.addEventListener('unhandledrejection',e=>reportStartupError([e.reason?.me
   <!-- Keep the unpatterned surround white in immersive VR as well as desktop. -->
   <a-entity id="kiemel-environment" visible="false"></a-entity>
   <a-sky id="contrast-surround" color="#ffffff" material="shader: flat" visible="false"></a-sky>
-  <a-entity position="0 0 0"><a-camera wasd-controls="enabled: false" look-controls="enabled: true">
-    <!-- Head-locked: always centered and never included in the rotating visual world. -->
-    <a-circle id="fixation-point" position="0 0 -2" radius="0.018" color="#e32636"
-      material="shader: flat; depthTest: false; depthWrite: false"></a-circle>
-  </a-camera></a-entity>
+  <a-entity position="0 0 0"><a-camera wasd-controls="enabled: false" look-controls="enabled: true"></a-camera></a-entity>
 </a-scene>
 </template>
 <script defer src="stimulus-engine.js?v=20261021-xrfix1"></script>
-<script defer src="pattern-config.js?v=20261022-noisefix1"></script>
+<script defer src="pattern-config.js?v=20261022-gridroom1"></script>
 <script defer src="layout-config.js?v=20261020-layout2"></script>
 <script defer src="motion-config.js?v=20261020-layout2"></script>
 <script defer src="stimulus-patterns.js?v=20261020-layout2"></script>
@@ -135,5 +141,5 @@ window.addEventListener('unhandledrejection',e=>reportStartupError([e.reason?.me
 <script defer src="kiemel-motion.js?v=20261021-xrfix1"></script>
 <script defer src="kiemel-environment.js?v=20261021-xrfix1"></script>
 <script defer src="kiemel-projection.js?v=20261021-xrfix1"></script>
-<script defer src="quest-runtime.js?v=20261021-xrfix1"></script>
+<script defer src="quest-runtime.js?v=20261022-gridroom1"></script>
 </body></html>

@@ -17,8 +17,8 @@ class Vector3 {
   toArray(){return [this.x,this.y,this.z];}
 }
 function element(){return {object3D:{position:new Vector3(),rotation:{x:0,y:0,z:0,set(x,y,z){Object.assign(this,{x,y,z});}},setRotationFromAxisAngle(axis,a){this.rotation.set(axis.x*a,axis.y*a,axis.z*a);},visible:true},dataset:{},style:{},setAttribute(){},addEventListener(){},setObject3D(k,v){this[k]=v;},getObject3D(k){return this[k];}};}
-const world=element(), room=element(), contrast=element(), surround=element(), camera=element(), kiemel=element();
-const elements={'#visual-world':world,'#room-pattern':room,'#contrast-pattern':contrast,'#contrast-surround':surround,'a-camera':camera,'#kiemel-environment':kiemel};
+const world=element(), room=element(), gridRoom=element(), gridFixation=element(), contrast=element(), surround=element(), camera=element(), kiemel=element();
+const elements={'#visual-world':world,'#room-pattern':room,'#grid-room-pattern':gridRoom,'#fixation-point':gridFixation,'#contrast-pattern':contrast,'#contrast-surround':surround,'a-camera':camera,'#kiemel-environment':kiemel};
 const scene={...element(),renderStarted:true,hasLoaded:true,camera:{},renderer:{xr:{isPresenting:false,getSession:()=>null},capabilities:{getMaxAnisotropy:()=>8}},is:()=>false,querySelector:s=>elements[s] || null};
 const nodes={};
 const events={};
@@ -51,6 +51,10 @@ async function flush(){await Promise.resolve();await Promise.resolve();}
  assert.equal(contrast.mesh.geometry.args[0],1);
  assert.equal(drawing[0][0],'#fff');assert(drawing.slice(1).every(d=>d[0]==='#000'));
  assert.equal(drawing.length,95); // white fill + 33 vertical + 61 horizontal lines
+ command('configure',{pattern:'grid-room',fixationVisible:true});await flush();
+ assert.equal(gridRoom.object3D.visible,true);assert.equal(gridFixation.object3D.visible,true);assert.equal(gridFixation.object3D.position.y,1.5);
+ command('configure',{pattern:'grid-room',fixationVisible:false});await flush();assert.equal(gridFixation.object3D.visible,false);
+ command('configure',{pattern:'grid'});await flush();
  for(const mode of ['sine']) {
   command('start',{mode,frequencyHz:.2});await flush();
   now+=3001;tick();

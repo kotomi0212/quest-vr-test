@@ -33,7 +33,7 @@
     const definition=StimulusPatterns.get(patternSelect.value), plane=layoutConfig.plane;
     if(definition.kind==='kiemel') {$('patternDescription').textContent='Kiemel：正面1.07 m、左右各1.52 m。黒背景に各壁500個の白三角形。高さ・奥行きは仮設定。設定元: kiemel-config.js';return;}
     $('patternDescription').textContent=definition.kind === 'legacy' ?
-      (patternSelect.value === 'room' ? '既存の部屋：quest.htmlの #room-pattern。' : '既存の半円筒：layout-config.jsのcylinder。') :
+      (patternSelect.value === 'grid-room' ? '8×4×8 mのグレーのグリッド室内全体を、校正した足関節軸まわりに回転します。' : patternSelect.value === 'room' ? '既存の部屋：quest.htmlの #room-pattern。' : '既存の半円筒：layout-config.jsのcylinder。') :
       `表示面：幅${plane.widthM} m×高さ${plane.heightM} m、中心(${plane.positionM.x}, ${plane.positionM.y}, ${plane.positionM.z}) m。` +
       `画像：${definition.width}×${definition.height} px、brightness=${definition.brightness}、contrast=${definition.contrast}。` +
       (definition.kind === 'noise' ? `振幅指数${definition.spectralSlope}、seed=${definition.seed}。` : `縞の向き${definition.orientation}°、明暗${definition.stripeCount}組。`) +
@@ -124,7 +124,7 @@
     try {
       const isKiemel=$('mode').value==='kiemel'||$('pattern').value==='kiemel-triangles';
       const kcfg=isKiemel&&!safe?readKiemel(['start','calibrate'].includes(type)):null;
-      if (type === 'configure') sendPreview({type,seq:lastSeq=Math.max(Date.now(),lastSeq+1),pattern:$('pattern').value,...(isKiemel?{protocol:'kiemel',kiemel:kcfg}:{})});
+      if (type === 'configure') sendPreview({type,seq:lastSeq=Math.max(Date.now(),lastSeq+1),pattern:$('pattern').value,fixationVisible:$('fixationVisible').checked,...(isKiemel?{protocol:'kiemel',kiemel:kcfg}:{})});
       if (!freshQuest() && !safe) { tell('Questの接続確認待ちです。Questの画面を確認してください'); return; }
       if (!safe && quest.firebaseState !== '接続済み') { tell('QuestのFirebase接続を確認してください'); return; }
       if (!safe && !quest.renderStarted) { tell('Questの3D描画が未完了です。下の起動エラー・描画状態を確認してください'); return; }
@@ -144,7 +144,7 @@
         runId: 'trial-' + crypto.randomUUID(), requestedAt: firebase.database.ServerValue.TIMESTAMP };
       if (!safe) {
         if(isKiemel)Object.assign(command,{protocol:'kiemel',mode:baselineRequest?'baseline':'kiemel',pattern:'kiemel-triangles',durationSec,kiemel:kcfg});
-        else Object.assign(command, { heightCm, eyeHeightM, ankleHeightM, mode, frequencyHz, amplitudeDeg, durationSec, pattern:$('pattern').value });
+        else Object.assign(command, { heightCm, eyeHeightM, ankleHeightM, mode, frequencyHz, amplitudeDeg, durationSec, pattern:$('pattern').value, fixationVisible:$('fixationVisible').checked });
       }
       attempt = { seq, type, received: false }; awaiting = attempt;
       // set() queues writes offline. A reconnect may deliver this later; Quest rejects stale START/calibrate.
@@ -173,6 +173,7 @@
   $('kiemelShort').onclick = () => {$('kiemelDuration').value=operatorKiemel.motion.shortDuration;drawWave();};
   $('kiemelRestore').onclick = () => {operatorKiemel=KiemelConfig.restore();populateKiemel();$('mode').value='kiemel';$('pattern').value='kiemel-triangles';updateModeLabel();describePattern();drawWave();return dispatch('configure');};
   $('applyPattern').onclick = () => dispatch('configure');
+  $('fixationVisible').onchange = () => dispatch('configure');
   $('csvDownload').onclick = async () => { try {
     const logs=(await root.child('logs').get()).val()||{},entries=[];
     for(const user of Object.values(logs))for(const [id,log] of Object.entries(user))entries.push({id,log,columns:log.sampleColumns||((log.samples?.[0]?.length||0)<=2?['elapsed_ms','applied_deg']:['elapsed_ms','applied_deg','commanded_deg','performance_ms','epoch_estimate_ms'])});

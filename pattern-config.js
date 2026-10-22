@@ -2,9 +2,10 @@
 (function (scope) {
   'use strict';
   const patternConfig = {
-    // PC・Questの初期選択。kiemel-triangles / noise-1f / stripes-high / stripes-low / grid / room
-    defaultPattern: 'noise-1f',
+    // PC・Questの初期選択。grid-room / kiemel-triangles / noise-1f / stripes-high / stripes-low / grid / room
+    defaultPattern: 'grid-room',
     patterns: {
+      'grid-room': { label: 'グレーのグリッド室内（全空間回転）', kind: 'legacy' },
       'kiemel-triangles': { label: 'Kiemel：黒背景・白三角形の3面', kind: 'kiemel' },
       'noise-1f': {
         label: '空間ノイズ（初期値1/f）', kind: 'noise',

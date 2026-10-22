@@ -16,6 +16,7 @@
   const pivot = new THREE.Vector3(0, 0.088, 0); // 校正原点。motionConfigの固定中心とは独立。
   const patternTextures = new Map();
   let selectedPattern = StimulusPatterns.defaultPattern;
+  let fixationVisible = true;
   let kiemelConfig=KiemelConfig.clone(KiemelConfig.CONFIG), kiemelModel=null, originInitialized=false;
   const kiemelOrigin=new THREE.Vector3(), kiemelAxis=new THREE.Vector3(1,0,0), kiemelCache=new Map();
   function trackedEyeCenter(target) {
@@ -102,6 +103,7 @@
   }
   function patternSettings() {
     if(selectedPattern==='kiemel-triangles')return {profile:'Kiemel-user-specification',generatorVersion:'kiemel-environment-v1',...KiemelConfig.clone(kiemelConfig.pattern),fingerprint:kiemelModel?.fingerprint||null,totalCount:kiemelModel?.count||null};
+    if(selectedPattern==='grid-room')return {profile:'gray-grid-room',dimensionsM:[8,4,8],gridSpacingM:1,fixationVisible};
     return patternTextures.get(selectedPattern)?.metadata || StimulusPatterns.metadata(selectedPattern);
   }
   const show = message => { document.querySelector('#status').textContent = message; };
@@ -141,18 +143,23 @@
     if (!definition) throw Error('映像パターン不正');
     pattern = StimulusPatterns.resolve(pattern);
     selectedPattern = pattern;
-    const isKiemel=pattern==='kiemel-triangles';
+    const isKiemel=pattern==='kiemel-triangles', isGridRoom=pattern==='grid-room';
     scene.querySelector('#visual-world').object3D.visible=!isKiemel;
     scene.querySelector('#kiemel-environment').object3D.visible=isKiemel;
     scene.querySelector('#contrast-surround').setAttribute('color',isKiemel?'#000000':'#ffffff');
     if(isKiemel) {scene.querySelector('#contrast-surround').object3D.visible=true;selectKiemel();return;}
+    const gridRoom=scene.querySelector('#grid-room-pattern'), fixation=scene.querySelector('#fixation-point');
+    gridRoom.object3D.visible=isGridRoom;
+    gridRoom.object3D.position.set(layoutConfig.anchor === 'calibrated-xz' ? pivot.x : 0,0,layoutConfig.anchor === 'calibrated-xz' ? pivot.z : 0);
+    fixation.object3D.visible=isGridRoom && fixationVisible;
+    fixation.object3D.position.set(0,calibration?.measuredEyeHeightM || calibration?.previewEyeHeightM || 1.5,-3.98);
     scene.querySelector('#room-pattern').object3D.visible = pattern === 'room';
-    scene.querySelector('#contrast-surround').object3D.visible = pattern !== 'room';
+    scene.querySelector('#contrast-surround').object3D.visible = !['room','grid-room'].includes(pattern);
     const el = scene.querySelector('#contrast-pattern');
-    el.object3D.visible = pattern !== 'room';
+    el.object3D.visible = !['room','grid-room'].includes(pattern);
     if (!['calibrated-xz','world'].includes(layoutConfig.anchor)) throw Error('layoutConfig.anchorが不正です');
     el.object3D.position.set(layoutConfig.anchor === 'calibrated-xz' ? pivot.x : 0, 0, layoutConfig.anchor === 'calibrated-xz' ? pivot.z : 0);
-    if (pattern === 'room' || el.dataset.pattern === pattern) return;
+    if (['room','grid-room'].includes(pattern) || el.dataset.pattern === pattern) return;
     el.dataset.pattern = pattern;
     const old = el.getObject3D('mesh');
     if(old) { old.geometry.dispose(); old.material.dispose(); }
@@ -267,6 +274,7 @@
       if (active || pending) { block('映像変更はSTOP後に行ってください'); return; }
       if (!StimulusPatterns.get(c.pattern)) { block('映像パターン不正'); return; }
       if(c.pattern==='kiemel-triangles') {try{kiemelConfig=candidateKiemel(c);}catch(e){block(e.message);return;}}
+      else fixationVisible=c.fixationVisible !== false;
       selectPattern(c.pattern); ack(ready() ? 'ready' : 'connected', { configured: true }); return;
     }
     if (!ready()) { block(rendered() ? 'enter VR before START（immersive-vr未開始）' : '3D描画の初期化が未完了です'); return; }
@@ -293,7 +301,8 @@
         scene.renderer.xr.getCamera(scene.camera).getWorldPosition(head);
       }
       pivot.set(head.x, c.ankleHeightM, head.z);
-      calibration = { heightCm: c.heightCm || null, measuredEyeHeightM: preview ? null : head.y, estimatedAnkleHeightM: (c.heightCm || 160)/100*.039, manualAnkleHeightM: c.ankleHeightM, referenceSpace: 'local-floor requested; verify floor on device', calibratedAtMs: Date.now() };
+      fixationVisible=c.fixationVisible !== false;
+      calibration = { heightCm: c.heightCm || null, measuredEyeHeightM: preview ? null : head.y, previewEyeHeightM: preview ? (c.eyeHeightM || 1.5) : null, estimatedAnkleHeightM: (c.heightCm || 160)/100*.039, manualAnkleHeightM: c.ankleHeightM, referenceSpace: 'local-floor requested; verify floor on device', calibratedAtMs: Date.now() };
       calibrated = true; rotate(0); show('位置合わせ完了（足首の前後・左右は頭の真下で近似）');
       selectPattern(c.pattern || 'room');
       ack('ready', { anklePivotM: pivot.toArray(), calibration }); return;
@@ -320,6 +329,7 @@
     if (c.mode === 'sine' && 2*Math.PI*c.frequencyHz*c.amplitudeDeg > Stimulus.limits.velocity) { block('角速度上限30°/sを超えます'); return; }
     if (c.pattern && !StimulusPatterns.get(c.pattern)) { block('映像パターン不正'); return; }
     finish('replaced');
+    fixationVisible=c.fixationVisible !== false;
     selectPattern(c.pattern || 'room');
     const token = generation;
     const trial = { cmd: { ...c, pattern:selectedPattern }, patternSettings:patternSettings(), layoutSettings:layoutSettings(), motionSettings:motionSettings(), samples: [], pivot: pivot.toArray(), points: null, calibration,

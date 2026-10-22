@@ -13,8 +13,8 @@ const database=()=>({ref});database.ServerValue={TIMESTAMP:{'.sv':'timestamp'}};
 const firebase={initializeApp(){},auth:()=>auth,database};
 const context={window:{firebase,VR_REMOTE_CONFIG:{firebase:{},sessionId:'test'},addEventListener(){}},firebase,document:{getElementById:id=>nodes[id],createElement:()=>({click(){}})},Stimulus:require('../stimulus-engine.js'),StimulusPatterns:require('../stimulus-patterns.js'),layoutConfig:require('../layout-config.js'),motionConfig:require('../motion-config.js'),KiemelConfig:require('../kiemel-config.js'),KiemelMotion:require('../kiemel-motion.js'),crypto:require('node:crypto').webcrypto,Date,Number,location:{origin:'http://test'},setInterval(){},setTimeout:fn=>fn(),Blob,URL:{createObjectURL:blob=>{csvBlob=blob;return'test-blob';},revokeObjectURL(){}}};
 vm.runInNewContext(source,context);
-assert.equal(nodes.pattern.value,'noise-1f');
-assert.equal(context.StimulusPatterns.defaultPattern,'noise-1f');
+assert.equal(nodes.pattern.value,'grid-room');
+assert.equal(context.StimulusPatterns.defaultPattern,'grid-room');
 listeners['sessions/test/status']({val:()=>({instanceId:'quest',at:Date.now(),firebaseState:'接続済み',immersive:true,renderStarted:true,calibrated:true})});
 (async()=>{
  nodes.pattern.value='grid';await nodes.start.onclick();assert.equal(writes.at(-1).mode,'sine');assert.equal(writes.at(-1).pattern,'grid');
