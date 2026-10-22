@@ -110,7 +110,7 @@
       if (subscribed) root.child('status').off('value', receive);
       subscribed = false; quest = null; previewReady = false; $('preview').removeAttribute('src'); return;
     }
-    if (!$('preview').getAttribute('src')) $('preview').src = 'quest.html?preview=1&v=20261021-xrfix1';
+    if (!$('preview').getAttribute('src')) $('preview').src = 'quest.html?preview=1&v=20261022-noiseroom2';
     if (!subscribed) { subscribed = true; root.child('status').on('value', receive, error => tell('Quest状態の購読エラー: ' + error.message)); }
   });
   setInterval(() => {
