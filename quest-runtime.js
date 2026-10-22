@@ -10,18 +10,115 @@
   let instanceId = crypto.randomUUID();
   let root, user, connected = false, hadConnection = false, serverOffset = 0;
   let active = null, pending = null, generation = 0, lastSeq = 0, commandSeq = null;
+  let calibration = null;
   let calibrated = preview, wasImmersive = false, graphicsLost = false, observedSession = null;
   let xrSupport = '確認中', firebaseState = preview ? 'プレビュー（接続なし）' : '準備中';
-  const pivot = new THREE.Vector3(0, 0.08, 0);
+  const pivot = new THREE.Vector3(0, 0.088, 0); // 校正原点。motionConfigの固定中心とは独立。
+  const patternTextures = new Map();
+  let selectedPattern = StimulusPatterns.defaultPattern;
+  let kiemelConfig=KiemelConfig.clone(KiemelConfig.CONFIG), kiemelModel=null, originInitialized=false;
+  const kiemelOrigin=new THREE.Vector3(), kiemelAxis=new THREE.Vector3(1,0,0), kiemelCache=new Map();
+  function trackedEyeCenter(target) {
+    const camera=scene.renderer.xr.getCamera(scene.camera);
+    const eyes=(camera.cameras||[]).map(eye=>eye.matrixWorld?.elements?.slice(12,15)).filter(p=>p?.length===3&&p.every(Number.isFinite));
+    if(eyes.length>=2) {
+      target.set(...[0,1,2].map(i=>eyes.reduce((sum,p)=>sum+p[i],0)/eyes.length));
+      return 'mean XR view world positions; no temporal averaging';
+    }
+    camera.getWorldPosition(target);return 'XR camera position; stereo matrices unavailable';
+  }
+  function candidateKiemel(c,bodyRequired=false) {
+    const cfg=KiemelConfig.clone(c.kiemel || KiemelConfig.CONFIG);
+    cfg.projection ||= KiemelConfig.clone(KiemelConfig.CONFIG.projection);
+    if(!Number.isInteger(cfg.projection.resolution)||cfg.projection.resolution<256||cfg.projection.resolution>2048)throw Error('投影解像度は256〜2048の整数が必要です');
+    KiemelMotion.validate(cfg,bodyRequired);KiemelEnvironment.walls(cfg.geometry);return cfg;
+  }
+  function resetKiemel() {
+    const el=scene.querySelector('#kiemel-environment');
+    if(el) {el.object3D.setRotationFromAxisAngle(kiemelAxis,0);el.object3D.position.copy(kiemelOrigin);const source=el.getObject3D('mesh')?.userData.projection.source;if(source){source.position.set(0,0,0);source.rotation.set(0,0,0);KiemelProjection.request(el.getObject3D('mesh'));}}
+  }
+  function applyKiemel(pose) {
+    const screens=scene.querySelector('#kiemel-environment').getObject3D('mesh'),world=screens.userData.projection.source;
+    const center=new THREE.Vector3(...pose.pivot),angle=KiemelMotion.rad(pose.renderAngleDeg);
+    world.setRotationFromAxisAngle(kiemelAxis,angle);
+    world.position.copy(center).sub(center.clone().applyAxisAngle(kiemelAxis,angle));
+    world.position.set(world.position.x,world.position.y,world.position.z+pose.translationZ);
+    KiemelProjection.request(screens);
+  }
+  function tickKiemel(now) {
+    const elapsed=(now-active.startedPerf)/1000;
+    let pose=KiemelMotion.at(elapsed,active.kiemel,active.cmd.mode==='baseline'),stopComplete=false;
+    if(active.returning) {
+      const u=Math.min(1,(now-active.returning.at)/2000),factor=1-u*u*(3-2*u);
+      pose={...KiemelMotion.pose(active.returning.ankleReferenceDeg*factor,active.kiemel.body,active.kiemel.motion.type),phase:'returning'};
+      stopComplete=u===1;
+    }
+    applyKiemel(pose);active.lastPose=pose;active.actualAngle=pose.angleDeg;
+    if(active.lastSamplePerf!==undefined)active.maxIntervalMs=Math.max(active.maxIntervalMs||0,now-active.lastSamplePerf);
+    active.lastSamplePerf=now;
+    active.samples.push([Math.round(elapsed*1000),pose.angleDeg,active.returning?0:pose.angleDeg,now,performance.timeOrigin+now,
+      pose.translationZ,active.returning?0:pose.translationZ,pose.ankleReferenceDeg,pose.eyeLinearZ,pose.eyeExactZ,pose.phase]);
+    if(pose.phase!==active.lastPhase) {
+      active.lastPhase=pose.phase;show('Kiemel '+pose.phase+' / '+active.kiemel.motion.type);
+      ack(pose.phase==='stimulus'?'running':pose.phase,{runId:active.cmd.runId});
+    }
+    if(stopComplete)finish('stopped');else if(pose.phase==='completed')finish('completed');
+  }
+  function selectKiemel() {
+    if(!originInitialized) {scene.camera?.getWorldPosition?.(kiemelOrigin);originInitialized=true;}
+    const p=kiemelConfig.pattern, geometryPattern={...p};delete geometryPattern.fixationPoint;
+    const key=JSON.stringify([kiemelConfig.geometry,geometryPattern,kiemelConfig.projection]);
+    if(!kiemelCache.has(key)) {
+      const model=KiemelEnvironment.generate(kiemelConfig);
+      kiemelCache.set(key,{model,group:KiemelProjection.create(THREE,model,p,kiemelConfig.projection.resolution)});
+    }
+    const entry=kiemelCache.get(key);kiemelModel=entry.model;
+    entry.group.userData.projection.source.userData.fixation.visible=p.fixationPoint;
+    scene.querySelector('#kiemel-environment').setObject3D('mesh',entry.group);resetKiemel();
+  }
+  // 配置の原点と運動の回転中心は別。pivotは既存のキャリブレーション結果。
+  const axisLength=Math.hypot(motionConfig.rotationAxis.x,motionConfig.rotationAxis.y,motionConfig.rotationAxis.z);
+  if (!Number.isFinite(axisLength) || !axisLength) throw Error('motionConfig.rotationAxisが不正です');
+  const motionAxis=new THREE.Vector3(motionConfig.rotationAxis.x/axisLength,motionConfig.rotationAxis.y/axisLength,motionConfig.rotationAxis.z/axisLength);
+  function rotationPivot() {
+    if (!['calibrated','fixed'].includes(motionConfig.pivot.mode)) throw Error('motionConfig.pivot.modeが不正です');
+    const base=motionConfig.pivot.mode === 'fixed' ? motionConfig.pivot.positionM : pivot;
+    const offset=motionConfig.pivot.offsetM;
+    const values=[base.x+offset.x,base.y+offset.y,base.z+offset.z];
+    if (!values.every(Number.isFinite)) throw Error('回転中心が不正です');
+    return new THREE.Vector3(...values);
+  }
+  function layoutSettings() {
+    if(selectedPattern==='kiemel-triangles')return {profile:'Kiemel',geometry:KiemelConfig.clone(kiemelConfig.geometry),walls:kiemelModel?.walls.map(({id,width,height,center,u,v})=>({id,width,height,center,u,v}))||null,eyeOrigin:kiemelOrigin.toArray(),projection:{method:'fixed-screen-offaxis',referenceEye:kiemelOrigin.toArray(),resolution:kiemelConfig.projection.resolution},coordinateSystem:'fixed eye origin; +X right,+Y up,+Z posterior; positive paper motion = forward (-Z)' };
+    return { ...JSON.parse(JSON.stringify(layoutConfig)), anchorOriginM: layoutConfig.anchor === 'calibrated-xz' ? {x:pivot.x,y:0,z:pivot.z} : {x:0,y:0,z:0} };
+  }
+  function motionSettings() {
+    if(selectedPattern==='kiemel-triangles') {
+      let dimensions=null;try{dimensions=KiemelMotion.bodyDimensions(kiemelConfig.body);}catch{/* Static display may precede body entry. */}
+      return {profile:'Kiemel',...KiemelConfig.clone(kiemelConfig.motion),rotationAxis:[1,0,0],renderAnglePerPaperAngle:-1,positiveDirection:'paper angle positive = forward (-Z); renderer Rx uses negative paper angle',anklePivotLocal:dimensions?[0,-dimensions.H,0]:null,hipPivotLocal:dimensions?[0,-dimensions.l2,0]:null,
+        anklePivotWorld:dimensions?[kiemelOrigin.x,kiemelOrigin.y-dimensions.H,kiemelOrigin.z]:null,hipPivotWorld:dimensions?[kiemelOrigin.x,kiemelOrigin.y-dimensions.l2,kiemelOrigin.z]:null,approximationBounds:dimensions?KiemelMotion.bounds(kiemelConfig):null};
+    }
+    return { ...JSON.parse(JSON.stringify(motionConfig)), resolvedPivotM:rotationPivot().toArray(), normalizedAxis:motionAxis.toArray() };
+  }
+  function patternSettings() {
+    if(selectedPattern==='kiemel-triangles')return {profile:'Kiemel-user-specification',generatorVersion:'kiemel-environment-v1',...KiemelConfig.clone(kiemelConfig.pattern),fingerprint:kiemelModel?.fingerprint||null,totalCount:kiemelModel?.count||null};
+    return patternTextures.get(selectedPattern)?.metadata || StimulusPatterns.metadata(selectedPattern);
+  }
   const show = message => { document.querySelector('#status').textContent = message; };
   const immersive = () => !!(scene.renderer?.xr.isPresenting &&
-    scene.renderer.xr.getSession() && scene.is('vr-mode') && !scene.is('ar-mode'));
+    scene.renderer.xr.getSession() && !scene.is('ar-mode'));
   const rendered = () => !!(scene.renderStarted && scene.camera && !graphicsLost);
   const ready = () => rendered() && (preview || immersive());
   function diagnostics() {
     return { instanceId, loaded: !!scene.hasLoaded, renderStarted: rendered(),
       vrButton: !!scene.querySelector('.a-enter-vr-button'), secureContext: isSecureContext,
-      xrSupport, immersive: immersive(), calibrated, firebaseState, startupError: window.vrLastError || '' };
+      xrSupport, immersive: immersive(), calibrated, calibration, firebaseState,
+      xrPresenting: !!scene.renderer?.xr.isPresenting,
+      xrSessionActive: !!scene.renderer?.xr.getSession(),
+      aframeVR: scene.is('vr-mode'), client: navigator.userAgent || 'unknown',
+      pattern: selectedPattern, patternSettings: patternSettings(), layoutSettings:layoutSettings(), motionSettings:motionSettings(),
+      translationZ:active?.lastPose?.translationZ||0,kiemelPhase:active?.lastPose?.phase||null,kiemelCondition:selectedPattern==='kiemel-triangles'?(active?.kiemel||kiemelConfig).motion.type:null,
+      elapsedSeconds:active?(performance.now()-active.startedPerf)/1000:0,renderedFrames:active?.samples.length||0,appliedAngleDeg: active?.actualAngle || 0, startupError: window.vrLastError || '' };
   }
   function updateDiagnostics() {
     const d = diagnostics();
@@ -38,12 +135,61 @@
       firebaseState = '状態送信失敗'; updateDiagnostics(); console.error(error);
     });
   }
+  // One visible mesh. Textures are generated once per pattern and reused, never per frame.
+  function selectPattern(pattern) {
+    const definition = StimulusPatterns.get(pattern);
+    if (!definition) throw Error('映像パターン不正');
+    pattern = StimulusPatterns.resolve(pattern);
+    selectedPattern = pattern;
+    const isKiemel=pattern==='kiemel-triangles';
+    scene.querySelector('#visual-world').object3D.visible=!isKiemel;
+    scene.querySelector('#kiemel-environment').object3D.visible=isKiemel;
+    scene.querySelector('#contrast-surround').setAttribute('color',isKiemel?'#000000':'#ffffff');
+    if(isKiemel) {scene.querySelector('#contrast-surround').object3D.visible=true;selectKiemel();return;}
+    scene.querySelector('#room-pattern').object3D.visible = pattern === 'room';
+    scene.querySelector('#contrast-surround').object3D.visible = pattern !== 'room';
+    const el = scene.querySelector('#contrast-pattern');
+    el.object3D.visible = pattern !== 'room';
+    if (!['calibrated-xz','world'].includes(layoutConfig.anchor)) throw Error('layoutConfig.anchorが不正です');
+    el.object3D.position.set(layoutConfig.anchor === 'calibrated-xz' ? pivot.x : 0, 0, layoutConfig.anchor === 'calibrated-xz' ? pivot.z : 0);
+    if (pattern === 'room' || el.dataset.pattern === pattern) return;
+    el.dataset.pattern = pattern;
+    const old = el.getObject3D('mesh');
+    if(old) { old.geometry.dispose(); old.material.dispose(); }
+    const plane = definition.kind !== 'legacy';
+    if (!patternTextures.has(pattern)) {
+      const canvas=document.createElement('canvas');
+      canvas.width=plane ? definition.width : 1024;
+      canvas.height=plane ? definition.height : 2048;
+      const ctx=canvas.getContext('2d');
+      let statistics;
+      if (plane) {
+        const result=StimulusPatterns.generate(pattern);
+        const image=ctx.createImageData(canvas.width,canvas.height); image.data.set(result.rgba); ctx.putImageData(image,0,0);
+        statistics=result.statistics;
+      } else Stimulus.drawGrid(ctx, canvas.width, canvas.height);
+      const texture=new THREE.CanvasTexture(canvas);
+      if (plane) texture.colorSpace=THREE.SRGBColorSpace;
+      texture.anisotropy=Math.min(8,scene.renderer?.capabilities.getMaxAnisotropy() || 1);
+      patternTextures.set(pattern,{texture,metadata:StimulusPatterns.metadata(pattern,statistics)});
+    }
+    const surface=plane ? layoutConfig.plane : layoutConfig.cylinder;
+    if (!(plane ? [surface.widthM,surface.heightM] : [surface.radiusM,surface.heightM]).every(n=>Number.isFinite(n)&&n>0) ||
+      ![...Object.values(surface.positionM),...Object.values(surface.rotationDeg)].every(Number.isFinite)) throw Error('表示面の配置設定が不正です');
+    const geometry=plane ? new THREE.PlaneGeometry(surface.widthM,surface.heightM) : new THREE.CylinderGeometry(surface.radiusM,surface.radiusM,surface.heightM,surface.radialSegments,1,true,THREE.MathUtils.degToRad(surface.thetaStartDeg),THREE.MathUtils.degToRad(surface.thetaLengthDeg));
+    const mesh=new THREE.Mesh(geometry,new THREE.MeshBasicMaterial({map:patternTextures.get(pattern).texture,side:THREE.DoubleSide,...(plane ? {toneMapped:false} : {})}));
+    mesh.position.set(surface.positionM.x,surface.positionM.y,surface.positionM.z);
+    mesh.rotation.set(THREE.MathUtils.degToRad(surface.rotationDeg.x),THREE.MathUtils.degToRad(surface.rotationDeg.y),THREE.MathUtils.degToRad(surface.rotationDeg.z));
+    el.setObject3D('mesh',mesh);
+  }
   function rotate(degrees) {
     const room = scene.querySelector('#visual-world');
     if (!room?.object3D) return;
-    room.object3D.rotation.x = THREE.MathUtils.degToRad(degrees);
-    const rotated = pivot.clone().applyAxisAngle(new THREE.Vector3(1, 0, 0), room.object3D.rotation.x);
-    room.object3D.position.copy(pivot).sub(rotated);
+    // 将来の回転適用を変更する入口。配置の初期姿勢とは別に親全体を動かす。
+    const angle=THREE.MathUtils.degToRad(degrees), center=rotationPivot();
+    room.object3D.setRotationFromAxisAngle(motionAxis,angle);
+    const rotated=center.clone().applyAxisAngle(motionAxis,angle);
+    room.object3D.position.copy(center).sub(rotated);
   }
   function cancelPending() {
     generation++;
@@ -52,16 +198,21 @@
   function finish(reason = 'completed') {
     cancelPending();
     const trial = active;
-    active = null; rotate(0);
+    active = null; rotate(0);resetKiemel();
     if (!trial) return;
-    show('停止・終了 (' + reason + ') / 室内は静止表示');
+    show('停止・終了 (' + reason + ') / 刺激は静止表示');
     ack('idle', { lastRunId: trial.cmd.runId, reason });
     if (preview || !root || !user) return;
     const c = trial.cmd;
     const payload = { ...c, reason, startedAtQuestWallClockMs: trial.startedWallMs,
-      endedAtQuestWallClockMs: Date.now(), anklePivotM: trial.pivot,
+      endedAtQuestWallClockMs: Date.now(), anklePivotM: trial.pivot, calibration: trial.calibration, patternSettings: trial.patternSettings, layoutSettings:trial.layoutSettings, motionSettings:trial.motionSettings, timeOriginMs: performance.timeOrigin, serverOffsetMs: serverOffset, sampleColumns: ['elapsed_ms','applied_deg','commanded_deg','performance_ms','epoch_estimate_ms'],
       samples: trial.samples,
-      note: 'Approximate modern room, not an exact paper reproduction. Ankle x/z approximate the point below the head. samples=[elapsed_ms,visual_world_rotation_deg]. Quest wall-clock timestamps are not synchronized with external sensors.' };
+      note: 'Software transforms, not measured photon output. Quest wall-clock timestamps are not synchronized with external sensors.' };
+    if(trial.kiemel) {
+      payload.kiemel=trial.kiemel;payload.kiemelCalibration=trial.kiemelCalibration;
+      payload.sampleColumns=['elapsed_ms','applied_deg','commanded_deg','performance_ms','epoch_estimate_ms','translation_z_m','commanded_translation_z_m','ankle_reference_deg','eye_linear_z_m','eye_exact_z_m','phase'];
+      payload.timingSummary={frameCount:trial.samples.length,meanHz:trial.samples.length>1?(trial.samples.length-1)*1000/(trial.samples.at(-1)[3]-trial.samples[0][3]):null,maxIntervalMs:trial.maxIntervalMs||0,nominalXRHz:trial.nominalXRHz||null,paperDisplayHz:60};
+    }
     // Saving a completed log must not block STOP or a new command.
     root.child('logs/' + user.uid + '/' + c.runId).set(payload).catch(error => {
       console.error(error); ack('log-error', { commandSeq: c.seq, lastRunId: c.runId, error: error.message });
@@ -86,69 +237,24 @@
       ack(current && rendered() ? 'ready' : 'connected');
     }
   }
-  function parseCsv(content) {
-    const points = [];
-    for (const line of content.trim().split(/\r?\n/)) {
-      const text = line.trim();
-      if (!text || text.startsWith('#') || /^time/i.test(text)) continue;
-      const cells = text.split(',');
-      if (cells.length !== 2 || cells.some(c => !c.trim())) throw Error('CSV行が不正です');
-      const [time, angle] = cells.map(Number);
-      if (!Number.isFinite(time) || !Number.isFinite(angle) || time < 0 || Math.abs(angle) > 45) throw Error('CSVの値が範囲外です');
-      points.push([time, angle]);
-    }
-    if (points.length < 2) throw Error('CSVには2行以上のデータが必要です');
-    if (points.some((p, i) => i && p[0] <= points[i - 1][0])) throw Error('CSV時刻は昇順・重複なしが必要です');
-    return points;
-  }
-  function interpolate(points, time) {
-    if (time <= points[0][0]) return points[0][1];
-    if (time >= points.at(-1)[0]) return points.at(-1)[1];
-    let a = 0, b = points.length - 1;
-    while (a + 1 < b) { const m = (a + b) >> 1; if (points[m][0] <= time) a = m; else b = m; }
-    return points[a][1] + (time - points[a][0]) / (points[b][0] - points[a][0]) * (points[b][1] - points[a][1]);
-  }
-  function hashSeed(text) {
-    let value = 2166136261;
-    for (const char of text) { value ^= char.charCodeAt(0); value = Math.imul(value, 16777619); }
-    return value >>> 0;
-  }
-  function seededRandom(seed) {
-    let state = seed || 1;
-    return () => {
-      state = (state + 0x6D2B79F5) | 0;
-      let x = state;
-      x = Math.imul(x ^ x >>> 15, x | 1); x ^= x + Math.imul(x ^ x >>> 7, x | 61);
-      return ((x ^ x >>> 14) >>> 0) / 4294967296;
-    };
-  }
-  // Random-phase Fourier synthesis: component power is proportional to 1/f.
-  function makePinkNoise(durationSec, peakDeg, seedText) {
-    const df = 1 / durationSec, maxHz = 1;
-    const random = seededRandom(hashSeed(seedText));
-    const components = [];
-    for (let frequency = df; frequency <= maxHz + df / 2; frequency += df) {
-      components.push({ frequency, weight: 1 / Math.sqrt(frequency), phase: random() * 2 * Math.PI });
-    }
-    const raw = time => components.reduce((sum, part) =>
-      sum + part.weight * Math.sin(2 * Math.PI * part.frequency * time + part.phase), 0);
-    let maxAbs = 0;
-    for (let i = 0; i <= Math.ceil(durationSec * 90); i++) maxAbs = Math.max(maxAbs, Math.abs(raw(i / 90)));
-    const scale = maxAbs ? peakDeg / maxAbs : 0;
-    return { angle: time => raw(time) * scale, seed: hashSeed(seedText), minHz: df,
-      maxHz, components: components.length };
-  }
+  const parseCsv = Stimulus.parseCsv;
   function block(error) { show(error); ack('blocked', { error }); }
   async function command(c) {
     if (!c || !Number.isSafeInteger(c.seq)) return;
     // STOP is always safe, including when a stale PC has not received this instance's status yet.
     if (!preview && c.questInstanceId !== instanceId) {
-      if (c.type === 'stop') { finish('stopped'); rotate(0); ack('idle', { commandSeq: c.seq, reason: 'stopped' }); }
+      if (c.type === 'stop' || c.type === 'emergency') { finish('stopped'); rotate(0); ack('idle', { commandSeq: c.seq, reason: 'stopped' }); }
       return;
     }
     if (c.seq <= lastSeq) return;
     lastSeq = c.seq; commandSeq = c.seq;
-    if (c.type === 'stop') {
+    if (c.type === 'return') {
+      cancelPending();
+      if (active && active.startedPerf !== null) { active.returning ||= { at: performance.now(), angle: active.actualAngle || 0,ankleReferenceDeg:active.lastPose?.ankleReferenceDeg||0 }; ack('returning'); }
+      else { finish('stopped'); ack('idle'); }
+      return;
+    }
+    if (c.type === 'stop' || c.type === 'emergency') {
       finish('stopped'); rotate(0); ack('idle', { reason: 'stopped' }); return;
     }
     if (!preview && (!Number.isFinite(c.requestedAt) ||
@@ -156,10 +262,30 @@
       block('古いコマンドです。PCから再送してください'); return;
     }
     syncXR();
+    if (c.type === 'configure') {
+      if (!rendered()) { block('3D描画の初期化が未完了です'); return; }
+      if (active || pending) { block('映像変更はSTOP後に行ってください'); return; }
+      if (!StimulusPatterns.get(c.pattern)) { block('映像パターン不正'); return; }
+      if(c.pattern==='kiemel-triangles') {try{kiemelConfig=candidateKiemel(c);}catch(e){block(e.message);return;}}
+      selectPattern(c.pattern); ack(ready() ? 'ready' : 'connected', { configured: true }); return;
+    }
     if (!ready()) { block(rendered() ? 'enter VR before START（immersive-vr未開始）' : '3D描画の初期化が未完了です'); return; }
     if (c.type === 'calibrate') {
       if (active || pending) { block('STOPしてから位置合わせしてください'); return; }
+      if(c.protocol==='kiemel') {
+        let cfg;try{cfg=candidateKiemel(c,true);}catch(e){block(e.message);return;}
+        const head=new THREE.Vector3();let eyeReference='PC preview only';
+        if(preview) {head.set(0,cfg.body.eyeHeight,0);scene.querySelector('a-camera').setAttribute('position',{x:0,y:head.y,z:0});}
+        else eyeReference=trackedEyeCenter(head);
+        kiemelConfig=cfg;kiemelOrigin.copy(head);originInitialized=true;
+        const dimensions=KiemelMotion.bodyDimensions(cfg.body);
+        calibration={measuredEyeHeightM:preview?null:head.y,manualAnkleHeightM:cfg.body.ankleHeight,calibratedAtMs:Date.now(),kiemel:{body:KiemelConfig.clone(cfg.body),origin:head.toArray(),eyeReference,...dimensions,inputEyeMinusTrackedEyeM:preview?null:cfg.body.eyeHeight-head.y}};
+        calibrated=true;rotate(0);selectPattern('kiemel-triangles');
+        show('Kiemel位置合わせ完了。眼基準原点を固定しました');ack('ready',{calibration});return;
+      }
+      if (!Number.isFinite(c.heightCm) || c.heightCm < 100 || c.heightCm > 220) { block('身長が範囲外です'); return; }
       if (!Number.isFinite(c.ankleHeightM) || c.ankleHeightM < 0 || c.ankleHeightM > 0.2) { block('足首の高さが不正です'); return; }
+      if (c.pattern && !StimulusPatterns.get(c.pattern)) { block('映像パターン不正'); return; }
       const head = new THREE.Vector3();
       if (preview) {
         scene.querySelector('a-camera').setAttribute('position', { x: 0, y: c.eyeHeightM || 1.5, z: 0 });
@@ -167,34 +293,45 @@
         scene.renderer.xr.getCamera(scene.camera).getWorldPosition(head);
       }
       pivot.set(head.x, c.ankleHeightM, head.z);
+      calibration = { heightCm: c.heightCm || null, measuredEyeHeightM: preview ? null : head.y, estimatedAnkleHeightM: (c.heightCm || 160)/100*.039, manualAnkleHeightM: c.ankleHeightM, referenceSpace: 'local-floor requested; verify floor on device', calibratedAtMs: Date.now() };
       calibrated = true; rotate(0); show('位置合わせ完了（足首の前後・左右は頭の真下で近似）');
-      ack('ready', { anklePivotM: pivot.toArray() }); return;
+      selectPattern(c.pattern || 'room');
+      ack('ready', { anklePivotM: pivot.toArray(), calibration }); return;
     }
     if (c.type !== 'start') return;
     if (!calibrated) { block('PCで立ち位置合わせが必要です'); return; }
-    if (!['baseline', 'sine', 'pink', 'csv'].includes(c.mode) || !Number.isFinite(c.durationSec) || c.durationSec < 5 || c.durationSec > 600 ||
+    if(c.protocol==='kiemel') {
+      if(active||pending){block('STOP後に次の条件を開始してください');return;}
+      let cfg;try{cfg=candidateKiemel(c,true);}catch(e){block(e.message);return;}
+      if(!['kiemel','baseline'].includes(c.mode)||!/^[A-Za-z0-9_-]{1,100}$/.test(c.runId||'')){block('Kiemel開始指令が不正です');return;}
+      if(!calibration?.kiemel||['ankleHeight','hipHeight','eyeHeight'].some(key=>calibration.kiemel.body[key]!==cfg.body[key])){block('身体寸法を入力しKiemelの位置合わせをしてください');return;}
+      kiemelConfig=cfg;selectPattern('kiemel-triangles');
+      const now=performance.now();active={cmd:{...c,pattern:'kiemel-triangles'},kiemel:cfg,kiemelCalibration:KiemelConfig.clone(calibration.kiemel),samples:[],pivot:pivot.toArray(),calibration,patternSettings:patternSettings(),layoutSettings:layoutSettings(),motionSettings:motionSettings(),startedPerf:now,startedWallMs:Date.now(),actualAngle:0,lastPhase:'pre-static',nominalXRHz:scene.renderer.xr.getSession()?.frameRate||null};
+      resetKiemel();ack('pre-static',{runId:c.runId});return;
+    }
+    if(c.mode==='kiemel'||c.pattern==='kiemel-triangles'){block('Kiemelのプロトコル指令が必要です');return;}
+    if (!['baseline', 'sine', 'csv'].includes(c.mode) || !Number.isFinite(c.durationSec) || c.durationSec < 5 || c.durationSec > 600 ||
       !/^[A-Za-z0-9_-]{1,100}$/.test(c.runId || '') ||
       (c.mode === 'sine' && (!Number.isFinite(c.frequencyHz) || c.frequencyHz <= 0 || c.frequencyHz > 2 ||
-        !Number.isFinite(c.amplitudeDeg) || c.amplitudeDeg < 0 || c.amplitudeDeg > 20)) ||
-      (c.mode === 'pink' && (!Number.isFinite(c.amplitudeDeg) || c.amplitudeDeg < 0 || c.amplitudeDeg > 20))) {
+        !Number.isFinite(c.amplitudeDeg) || c.amplitudeDeg < 0 || c.amplitudeDeg > 20))) {
       block('刺激設定が不正です'); return;
     }
+    if (active || pending) { block('STOP後に次の条件を開始してください'); return; }
+    if (c.mode === 'sine' && 2*Math.PI*c.frequencyHz*c.amplitudeDeg > Stimulus.limits.velocity) { block('角速度上限30°/sを超えます'); return; }
+    if (c.pattern && !StimulusPatterns.get(c.pattern)) { block('映像パターン不正'); return; }
     finish('replaced');
+    selectPattern(c.pattern || 'room');
     const token = generation;
-    const trial = { cmd: { ...c }, samples: [], pivot: pivot.toArray(), points: null, pink: null,
+    const trial = { cmd: { ...c, pattern:selectedPattern }, patternSettings:patternSettings(), layoutSettings:layoutSettings(), motionSettings:motionSettings(), samples: [], pivot: pivot.toArray(), points: null, calibration,
       startedPerf: null, startedWallMs: null, preludePerf: null };
-    if (c.mode === 'pink') {
-      trial.pink = makePinkNoise(c.durationSec, c.amplitudeDeg, c.runId);
-      Object.assign(trial.cmd, { noiseSeed: trial.pink.seed, noiseMinHz: trial.pink.minHz,
-        noiseMaxHz: trial.pink.maxHz, noiseComponents: trial.pink.components,
-        spectrum: 'power proportional to 1/f' });
-    }
     if (preview) {
       scene.querySelector('a-camera').setAttribute('position', { x: 0, y: c.eyeHeightM || 1.5, z: 0 });
       pivot.set(0, c.ankleHeightM || 0, 0); trial.pivot = pivot.toArray();
     }
     if (c.mode === 'csv') {
       if (!/^[A-Za-z0-9_.-]+\.csv$/.test(c.csvFile || '') || c.csvFile.includes('..')) { block('CSVファイル名が不正です'); return; }
+      if (c.csvPoints) { try { trial.points = parseCsv(c.csvPoints.map(p=>p.join(',')).join('\n')); } catch(e) { block(e.message); return; } }
+      else {
       pending = new AbortController(); ack('loading', { runId: c.runId });
       try {
         const response = await fetch('./' + c.csvFile, { cache: 'no-store', signal: pending.signal });
@@ -204,6 +341,7 @@
         if (token === generation) { pending = null; block('CSV読込エラー: ' + error.message); }
         return;
       }
+    }
     }
     if (token !== generation || !ready() || (!preview && !connected)) return;
     pending = null; trial.preludePerf = performance.now(); active = trial; rotate(0);
@@ -215,23 +353,34 @@
       if (!active) return;
       if (!ready()) { finish('not-ready'); return; }
       const now = performance.now();
+      if(active.kiemel){tickKiemel(now);return;}
       if (active.startedPerf === null) {
         if (now - active.preludePerf < 3000) return;
         active.startedPerf = now; active.startedWallMs = Date.now();
         show('再生中: ' + active.cmd.mode); ack('running', { commandSeq: active.cmd.seq, runId: active.cmd.runId, startedAtQuestWallClockMs: active.startedWallMs });
       }
+      if (active.returning) {
+        const u=Math.min(1,(now-active.returning.at)/2000);
+        const deg=active.returning.angle*(1-u*u*(3-2*u)); rotate(deg);
+        active.samples.push([(now-active.startedPerf),deg,0,now,performance.timeOrigin+now]);
+        if(u===1) finish('stopped'); return;
+      }
       const t = (now - active.startedPerf) / 1000, c = active.cmd;
       if (t >= c.durationSec) { finish(); return; }
-      const degrees = c.mode === 'sine' ? c.amplitudeDeg * Math.sin(2 * Math.PI * c.frequencyHz * t) :
-        c.mode === 'pink' ? active.pink.angle(t) :
-        c.mode === 'csv' ? interpolate(active.points, t) : 0;
-      rotate(degrees); active.samples.push([Math.round(t * 1000), Math.round(degrees * 100000) / 100000]);
+      const commanded = Stimulus.angle(c, t, active.points);
+      const dt = Math.max(0, Math.min((now - (active.lastFrame ?? now)) / 1000, .1));
+      const previous = active.actualAngle || 0;
+      const target = commanded * Math.min(1, t / 1.5, Math.max(0, (c.durationSec - t) / 1.5));
+      const degrees = previous + Math.max(-30 * dt, Math.min(30 * dt, target - previous));
+      active.lastFrame = now; active.actualAngle = degrees;
+      rotate(degrees); active.samples.push([Math.round(t * 1000), Math.round(degrees * 100000) / 100000, commanded, now, performance.timeOrigin + now]);
     }
   });
   if (preview) {
     document.querySelector('#info').style.display = 'none';
     scene.setAttribute('xr-mode-ui', 'enabled: false');
     scene.setAttribute('embedded', '');
+    scene.style.width='100vw'; scene.style.height='100vh';
     window.addEventListener('message', event => {
       if (event.source !== parent || event.origin !== location.origin || event.data?.type !== 'stimulus-command') return;
       void command(event.data.command).catch(error => reportStartupError(error.message));
@@ -239,9 +388,10 @@
   }
   scene.addEventListener('enter-vr', syncXR);
   scene.addEventListener('exit-vr', () => { calibrated = preview; finish('vr-exited'); syncXR(); });
-  scene.addEventListener('loaded', () => { show('室内読込完了。右下の標準VRボタンで開始してください'); updateDiagnostics(); });
+  scene.addEventListener('loaded', () => { show('Kiemel読込完了。右下の標準VRボタンで開始してください'); updateDiagnostics(); });
   scene.addEventListener('renderstart', () => {
     clearTimeout(startupTimer); document.querySelector('#startup-error').hidden = true;
+    selectPattern(StimulusPatterns.defaultPattern);
     scene.renderer.xr.addEventListener('sessionstart', syncXR);
     scene.renderer.xr.addEventListener('sessionend', () => { calibrated = preview; finish('vr-exited'); syncXR(); });
     scene.canvas.addEventListener('webglcontextlost', () => {
@@ -258,6 +408,13 @@
   const startupTimer = setTimeout(() => {
     if (!rendered()) { reportStartupError('3D空間の初期化が未完了です。' + window.vrLastError); ack('blocked', { error: window.vrLastError }); }
   }, 12000);
+  scene.addEventListener('loaded',()=>{
+    const beforeSceneRender=scene.object3D.onBeforeRender;
+    scene.object3D.onBeforeRender=function(renderer,...args){
+      beforeSceneRender?.call(this,renderer,...args);
+      if(selectedPattern==='kiemel-triangles')KiemelProjection.renderPending(renderer,scene.querySelector('#kiemel-environment').getObject3D('mesh'));
+    };
+  });
   document.body.appendChild(scene);
   if (!isSecureContext || !navigator.xr) xrSupport = '非対応（HTTPS・Quest Browserを確認）';
   else navigator.xr.isSessionSupported('immersive-vr').then(supported => {
@@ -265,7 +422,7 @@
   }).catch(error => { xrSupport = error.message; updateDiagnostics(); });
   // Poll state even when XR events or a paused render loop arrive in another order.
   setInterval(() => { syncXR(); updateDiagnostics(); }, 250);
-  setInterval(() => ack(active ? (active.startedPerf === null ? 'countdown' : 'running') : pending ? 'loading' : ready() ? 'ready' : 'connected',
+  setInterval(() => ack(active ? (active.returning ? 'returning' : active.kiemel ? active.lastPose?.phase==='stimulus'?'running':active.lastPose?.phase||'pre-static' : active.startedPerf === null ? 'countdown' : 'running') : pending ? 'loading' : ready() ? 'ready' : 'connected',
     active ? { commandSeq: active.cmd.seq, runId: active.cmd.runId } : {}), 5000);
   async function loadScript(src) {
     await new Promise((resolve, reject) => {

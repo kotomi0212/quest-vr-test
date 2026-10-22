@@ -23,6 +23,7 @@ window.addEventListener('unhandledrejection',e=>reportStartupError([e.reason?.me
 <a-scene webxr="referenceSpaceType: local-floor" stimulus-driver background="color: #e8eef7" xr-mode-ui="enabled: true">
   <!-- Approximate modern room: dimensions and furnishings are design choices, not recovered from the paper. Origin = ankle/floor. -->
   <a-entity id="visual-world">
+    <a-entity id="room-pattern">
     <a-box position="0 -0.06 -3" width="10" height="0.12" depth="12" color="#b59b7c"></a-box>
     <a-box position="0 3.5 -3" width="10" height="0.1" depth="12" color="#f0eee9"></a-box>
     <a-box position="-5 1.75 -3" width="0.12" height="3.5" depth="12" color="#e4e1da"></a-box>
@@ -113,12 +114,26 @@ window.addEventListener('unhandledrejection',e=>reportStartupError([e.reason?.me
     <a-entity light="type: ambient; intensity: 0.85; color: #fff5e6"></a-entity>
     <a-entity light="type: directional; intensity: 0.65" position="-2 3 1"></a-entity>
   </a-entity>
+    <a-entity id="contrast-pattern" visible="false"></a-entity>
+  </a-entity>
+  <!-- Keep the unpatterned surround white in immersive VR as well as desktop. -->
+  <a-entity id="kiemel-environment" visible="false"></a-entity>
+  <a-sky id="contrast-surround" color="#ffffff" material="shader: flat" visible="false"></a-sky>
   <a-entity position="0 0 0"><a-camera wasd-controls="enabled: false" look-controls="enabled: true">
-    <!-- Head-locked fixation point: centered and independent from the rotating room. -->
+    <!-- Head-locked: always centered and never included in the rotating visual world. -->
     <a-circle id="fixation-point" position="0 0 -2" radius="0.018" color="#e32636"
-      material="shader: flat; depthTest: false; depthWrite: false" render-order="999"></a-circle>
+      material="shader: flat; depthTest: false; depthWrite: false"></a-circle>
   </a-camera></a-entity>
 </a-scene>
 </template>
-<script defer src="quest-runtime.js"></script>
+<script defer src="stimulus-engine.js?v=20261021-xrfix1"></script>
+<script defer src="pattern-config.js?v=20261022-noisefix1"></script>
+<script defer src="layout-config.js?v=20261020-layout2"></script>
+<script defer src="motion-config.js?v=20261020-layout2"></script>
+<script defer src="stimulus-patterns.js?v=20261020-layout2"></script>
+<script defer src="kiemel-config.js?v=20261021-xrfix1"></script>
+<script defer src="kiemel-motion.js?v=20261021-xrfix1"></script>
+<script defer src="kiemel-environment.js?v=20261021-xrfix1"></script>
+<script defer src="kiemel-projection.js?v=20261021-xrfix1"></script>
+<script defer src="quest-runtime.js?v=20261021-xrfix1"></script>
 </body></html>
