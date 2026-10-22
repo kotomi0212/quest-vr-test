@@ -63,7 +63,7 @@
       const ctx=$('waveform').getContext('2d'); ctx.clearRect(0,0,640,160);ctx.beginPath();
       const duration=Number($('duration').value);
       for(let i=0;i<=640;i++){const a=Stimulus.angle(c,i/640*duration); const y=80-a*3; if(i)ctx.lineTo(i,y);else ctx.moveTo(i,y);}
-      ctx.strokeStyle='#165e91';ctx.stroke(); $('waveError').textContent=($('mode').value==='multi10'?'10周波数: '+Stimulus.multi10Frequencies.map(f=>f.toFixed(3)).join(', ')+' Hz。':'単一sin。')+'指定 '+pp+'° peak-to-peak。適用時は開始終了ランプ・速度制限あり';
+      ctx.strokeStyle='#165e91';ctx.stroke(); $('waveError').textContent=($('mode').value==='multi10'?'速度平滑10周波数: '+Stimulus.multi10Frequencies.map(f=>f.toFixed(3)).join(', ')+` Hz（振幅∝f^-${Stimulus.multi10AmplitudeExponent}）。`:'単一sin。')+'指定 '+pp+'° peak-to-peak。適用時は開始終了ランプ・速度制限あり';
     } catch(e){$('waveError').textContent=e.message;}
   }
   $('control').addEventListener('input',drawWave); drawWave();

@@ -20,8 +20,11 @@
     return p[a][1]+(t-p[a][0])/(p[b][0]-p[a][0])*(p[b][1]-p[a][1]);
   }
   const multi10Frequencies=Object.freeze([3,7,13,23,43,73,113,179,263,367].map(n=>n/125));
+  // Smooth-velocity profile: retain all ten frequencies while attenuating the
+  // rapid reversals that made the previous capped 1/f weighting look jerky.
+  const multi10AmplitudeExponent=1.5;
   function multi10Raw(t) { return multi10Frequencies.reduce((sum,frequency,index)=>
-    sum+(index%2?1:-1)*Math.sin(2*Math.PI*frequency*t)/Math.min(frequency,multi10Frequencies[7]),0); }
+    sum+(index%2?1:-1)*Math.sin(2*Math.PI*frequency*t)/frequency**multi10AmplitudeExponent,0); }
   let multi10Peak=0;
   for(let i=0;i<=125000;i++)multi10Peak=Math.max(multi10Peak,Math.abs(multi10Raw(i/1000)));
   function angle(c,t,p) {
@@ -38,6 +41,6 @@
     for(let x=0;x<=32;x++) ctx.fillRect(x*dx-dx*.08,0,dx*.16,height);
     for(let y=0;y<=60;y++) ctx.fillRect(0,y*dy-dy*.08,width,dy*.16);
   }
-  const api={limits,parseCsv,interpolate,angle,drawGrid,multi10Frequencies,multi10Peak}; scope.Stimulus=api;
+  const api={limits,parseCsv,interpolate,angle,drawGrid,multi10Frequencies,multi10Peak,multi10AmplitudeExponent}; scope.Stimulus=api;
   if(typeof module!=='undefined') module.exports=api;
 })(globalThis);
