@@ -29,9 +29,9 @@
 <label><input id="kiemelFixation" type="checkbox" style="width:auto">中央注視点を表示（初期OFF）</label>
 <p class="muted">正面1.07 m／左右1.52 mは眼からの距離。高さ2.5 m・側壁奥行き2.14 mは仮寸法です。入力した身体寸法を変更したら再度位置合わせをしてください。論文の正方向は前方（A-Frameでは−Z）です。固定3面スクリーンに基準眼位置から投影します。Questの頭部追跡は維持します。</p><p class="muted">Kiemelではこの枠内の設定を使用します。下にあるsinの振幅／周波数／再生時間は使用しません。</p></fieldset>
 <fieldset id="legacyControls"><legend>グリッド室内の刺激設定（Kiemelでは使用しません）</legend><label>正弦波の周波数 (Hz・単一sinのみ)</label><input id="freq" type="number" min="0.01" max="2" step="0.01" value="0.2">
-<label>振幅プリセット（peak-to-peak）</label><select id="ampPreset"><option value="0.5">0.5° pp：微小</option><option value="1" selected>1° pp：控えめ</option><option value="2">2° pp：多周波の推奨候補</option><option value="4">4° pp：強め</option></select>
-<label>振幅 (度、peak-to-peak)</label><input id="amp" type="number" min="0.1" max="8" step="0.1" value="1">
-<p class="muted">文献範囲：0.05°の微小sin、0.5～8° ppのPRTS、0.5～4° ppの10周波数刺激。プレ実験の初期値は控えめな1° ppです。</p>
+<label>振幅プリセット（peak-to-peak）</label><select id="ampPreset"><option value="0.5">0.5° pp：微小</option><option value="1">1° pp：控えめ</option><option value="2" selected>2° pp：多周波の推奨初期値</option><option value="4">4° pp：強め</option></select>
+<label>振幅 (度、peak-to-peak)</label><input id="amp" type="number" min="0.1" max="8" step="0.1" value="2">
+<p class="muted">文献範囲：0.05°の微小sin、0.5～8° ppのPRTS、0.5～4° ppの10周波数刺激。プレ実験の初期値は、VR多周波刺激で全周波数の有意なcoherenceが報告された2° pp（±1°）です。</p>
 <label>再生時間 (秒)</label><input id="duration" type="number" min="5" max="600" step="5" value="60">
 </fieldset><canvas id="waveform" width="640" height="160" style="width:100%;background:#f5f5f5"></canvas><p id="waveError"></p>
 <div class="controls"><button id="start" class="primary">START（3秒後開始）</button><button id="stop" class="danger">STOP（2秒でBaselineへ）</button></div>
@@ -44,5 +44,5 @@
 <script src="stimulus-patterns.js?v=20261020-layout2"></script>
 <script src="kiemel-config.js?v=20261021-xrfix1"></script>
 <script src="kiemel-motion.js?v=20261021-xrfix1"></script>
-<script src="operator.js?v=20261022-smooth10"></script>
+<script src="operator.js?v=20261022-amp2"></script>
 </body></html>

@@ -5,7 +5,7 @@ const source=fs.readFileSync(path.join(__dirname,'../operator.js'),'utf8');
 const nodes={};
 for(const m of html.matchAll(/id="([^"]+)"/g))nodes[m[1]]={value:'',textContent:'',style:{},children:[],appendChild(n){this.children.push(n);},addEventListener(){},getAttribute(){return null;},setAttribute(){},removeAttribute(){},getContext(){return {clearRect(){},beginPath(){},lineTo(){},moveTo(){},stroke(){}};}};
 for(const m of source.matchAll(/\$\('([^']+)'\)/g))assert(nodes[m[1]],'Missing operator element '+m[1]);
-Object.entries({mode:'sine',pattern:'grid',amp:'1',ampPreset:'1',freq:'.2',duration:'10',heightCm:'160',eyeCm:'150',ankleCm:'8.8',hipCm:'90',rotationCenter:'ankle'}).forEach(([id,v])=>nodes[id].value=v);
+Object.entries({mode:'sine',pattern:'grid',amp:'2',ampPreset:'2',freq:'.2',duration:'10',heightCm:'160',eyeCm:'150',ankleCm:'8.8',hipCm:'90',rotationCenter:'ankle'}).forEach(([id,v])=>nodes[id].value=v);
 const writes=[],listeners={};let downloadLogs={},csvBlob;
 function ref(p){return {child:n=>ref(p+'/'+n),on:(e,cb)=>{listeners[p]=cb;if(p==='.info/connected')cb({val:()=>true});},off(){},set:async c=>{writes.push(c);},get:async()=>({val:()=>downloadLogs})};}
 const auth={onAuthStateChanged:cb=>cb({uid:'operator',isAnonymous:false})};
@@ -19,7 +19,7 @@ listeners['sessions/test/status']({val:()=>({instanceId:'quest',at:Date.now(),fi
 (async()=>{
  nodes.pattern.value='grid';await nodes.start.onclick();assert.equal(writes.at(-1).mode,'sine');assert.equal(writes.at(-1).pattern,'grid');
  nodes.mode.value='sine';await nodes.start.onclick();assert.equal(writes.at(-1).mode,'sine');
- nodes.mode.value='multi10';await nodes.mode.onchange();await nodes.start.onclick();assert.equal(writes.at(-1).mode,'multi10');assert.equal(writes.at(-1).amplitudePpDeg,1);
+ nodes.mode.value='multi10';await nodes.mode.onchange();await nodes.start.onclick();assert.equal(writes.at(-1).mode,'multi10');assert.equal(writes.at(-1).amplitudePpDeg,2);
  nodes.rotationCenter.value='hip';await nodes.start.onclick();assert.equal(writes.at(-1).rotationCenter,'hip');assert.equal(writes.at(-1).hipHeightM,.9);
  nodes.mode.value='sine';nodes.rotationCenter.value='ankle';
  await nodes.baseline.onclick();assert.equal(writes.at(-1).mode,'baseline');assert.equal(nodes.mode.value,'sine');
