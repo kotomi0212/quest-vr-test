@@ -1,0 +1,50 @@
+<!doctype html><html lang="ja"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Quest リモート操作画面</title>
+<script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-app-compat.js"></script>
+<script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-auth-compat.js"></script>
+<script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-database-compat.js"></script>
+<script src="firebase-config1.js"></script>
+<style>body{font:16px system-ui;max-width:720px;margin:32px auto;padding:0 18px;background:#f6f8fa;color:#172233}h1{font-size:24px}section{background:white;border:1px solid #dee3eb;border-radius:12px;padding:18px;margin:15px 0}label{display:block;font-weight:650;margin:10px 0 4px}input,select,button{padding:10px;border:1px solid #b4beca;border-radius:7px;font:inherit;box-sizing:border-box}input,select{width:100%}button{cursor:pointer;background:#e9eef5}button.primary{background:#226f9e;color:#fff;border-color:#226f9e}button.danger{background:#ab3131;color:#fff;border-color:#ab3131}.controls{display:grid;grid-template-columns:1fr 1fr;gap:10px}.muted{color:#556477;font-size:13px}#state{font-weight:700;color:#1d6b4d}#log{white-space:pre-wrap;font-size:13px}button:active{transform:translateY(2px)}button:disabled{opacity:.65;cursor:wait}.action-feedback{padding:12px;border-radius:8px;background:#edf4ff;min-height:24px;font-weight:700}iframe{width:100%;height:340px;border:0;border-radius:10px;background:#c8dff2}</style>
+</head><body>
+<h1>Quest 視覚刺激：PC操作画面</h1>
+<p class="muted">これは試験用の遠隔制御UIです。A-Frameの刺激と研究用データの同期・刺激妥当性は別途検証してください。</p>
+<section id="login"><h2>1. 実験者ログイン</h2><label>Firebase Auth のメール</label><input id="email" type="email" autocomplete="username"><label>パスワード</label><input id="password" type="password" autocomplete="current-password"><p><button id="signIn" class="primary">ログイン</button></p><div id="authState"></div></section>
+<section id="control" style="display:none"><h2>2. 刺激設定と操作</h2><p>Questの状態：<span id="state">確認中</span></p>
+<p id="questDiagnostics" class="muted"></p>
+<h3>Questで提示する刺激のプレビュー</h3><iframe id="preview" title="VR刺激プレビュー"></iframe><p class="muted">正面から見た同じVR空間です。Questの頭の向き・実際の表示タイミングは一致しません。</p><p><b>初期設定：グレーのグリッド室内・空間固定注視点・関節軸回転</b></p><fieldset id="legacyBody"><legend>運動条件と位置合わせ</legend><label>身長（cm・記録用）</label><input id="heightCm" type="number" value="160" min="100" max="220"><label>目の高さ（床からcm・PCプレビュー用）</label><input id="eyeCm" type="number" value="150" min="80" max="210"><label>足関節中心の高さ（床からcm）</label><input id="ankleCm" type="number" step="0.1" value="8.8" min="0" max="20"><label>股関節中心の高さ（床からcm）</label><input id="hipCm" type="number" step="0.1" value="90" min="40" max="140"><label>刺激の運動条件</label><select id="rotationCenter"><option value="ankle" selected>足関節中心回転</option><option value="hip">股関節中心回転（既存条件・角度倍率なし）</option><option value="translation">前後並進（足関節条件と眼位置速度を近似一致）</option></select><label><input id="fixationVisible" type="checkbox" checked style="width:auto"> 正面壁の目線高さに注視点を表示</label></fieldset><p><button id="calibrate">立ち位置を合わせる（1回押す）</button></p><p class="muted">QuestでVRに入り、実験位置で直立して正面を向いた状態で1回押してください。頭部X/Zと入力した関節高から回転中心を確定します。並進量は、校正した眼―足関節間の高さ×足関節基準角（rad）です。注視点は正面壁に固定され、室内と一緒に動きます。</p><p id="measuredEye">Quest目高: 未取得</p><button id="estimateAnkle">身長から足関節・股関節高を仮推定</button>
+<label>映像パターン（運動条件は共通）</label><select id="pattern"></select>
+<p><button id="applyPattern">選択した映像をQuestへ反映（VR開始前も可）</button></p>
+<p id="patternDescription" class="muted"></p><p class="muted">模様は停止中に変更してください。比較時は振幅・周波数・時間・位置合わせをそろえます。コントラスト値はソフトウェア上の設定で、Questの実測輝度を保証するものではありません。</p>
+<label>刺激</label><select id="mode"><option value="sine" selected>sin（単一正弦波）</option><option value="multi10">10周波数合成・速度平滑版（0.024～2.936 Hz）</option></select>
+<fieldset id="kiemelControls" hidden><legend>Kiemel設定（復旧用・通常UIでは非表示）</legend>
+<label>運動条件</label><select id="kiemelCondition"><option value="ankle">Ankle rotation</option><option value="hip">Hip rotation</option><option value="translation">Translation</option></select>
+<label>眼の高さ・実測（cm）</label><input id="kiemelEye" type="number" step="0.1" placeholder="必須・推定値なし">
+<label>股関節の高さ・実測（cm）</label><input id="kiemelHip" type="number" step="0.1" placeholder="必須・推定値なし">
+<label>足関節の高さ・実測（cm）</label><input id="kiemelAnkle" type="number" step="0.1" placeholder="必須・推定値なし">
+<label>共通振幅倍率（3条件で同じ値）</label><input id="kiemelScale" type="number" min="0" step="0.1" value="1">
+<label>最初の静止（秒）</label><input id="kiemelPre" type="number" min="0" value="5">
+<label>刺激（秒・初期波形の共通周期125秒）</label><input id="kiemelDuration" type="number" min="0" value="250">
+<label>最後の静止（秒）</label><input id="kiemelPost" type="number" min="0" value="5">
+<p><button id="kiemelShort">短縮試験：125秒</button> <button id="kiemelRestore">Kiemel基準設定へ復元</button></p>
+<label><input id="kiemelFixation" type="checkbox" style="width:auto">中央注視点を表示（初期OFF）</label>
+<p class="muted">正面1.07 m／左右1.52 mは眼からの距離。高さ2.5 m・側壁奥行き2.14 mは仮寸法です。入力した身体寸法を変更したら再度位置合わせをしてください。論文の正方向は前方（A-Frameでは−Z）です。固定3面スクリーンに基準眼位置から投影します。Questの頭部追跡は維持します。</p><p class="muted">Kiemelではこの枠内の設定を使用します。下にあるsinの振幅／周波数／再生時間は使用しません。</p></fieldset>
+<fieldset id="legacyControls"><legend>グリッド室内の刺激設定（Kiemelでは使用しません）</legend><label>正弦波の周波数 (Hz・単一sinのみ)</label><input id="freq" type="number" min="0.01" max="2" step="0.01" value="0.2">
+<label>振幅プリセット（peak-to-peak）</label><select id="ampPreset"><option value="0.5">0.5° pp：微小</option><option value="1">1° pp：控えめ</option><option value="2" selected>2° pp：多周波の推奨初期値</option><option value="4">4° pp：強め</option></select>
+<label>振幅 (度、peak-to-peak)</label><input id="amp" type="number" min="0.1" max="8" step="0.1" value="2">
+<p class="muted">文献範囲：0.05°の微小sin、0.5～8° ppのPRTS、0.5～4° ppの10周波数刺激。プレ実験の初期値は、VR多周波刺激で全周波数の有意なcoherenceが報告された2° pp（±1°）です。</p>
+<label>再生時間 (秒)</label><input id="duration" type="number" min="5" max="600" step="5" value="60">
+</fieldset><canvas id="waveform" width="640" height="160" style="width:100%;background:#f5f5f5"></canvas><p id="waveError"></p>
+<div class="controls"><button id="start" class="primary">START（3秒後開始）</button><button id="stop" class="danger">STOP（2秒でBaselineへ）</button></div>
+<p><button id="emergency" class="danger">緊急停止（即時0°）</button> <button id="retry">接続再試行（PC再読込）</button> <span id="pcConnection"></span></p><p><button id="baseline">Baseline開始</button> <button id="csvDownload">ログCSV出力</button></p><p id="log" class="action-feedback" role="status" aria-live="polite">STARTで開始、STOPで停止します。</p><p><button id="download">Questが保存した刺激ログを取得（JSON）</button></p>
+</section>
+<script src="stimulus-engine.js?v=20261022-smooth10"></script>
+<script src="pattern-config1.js?v=20261027-requested1"></script>
+<script src="layout-config.js?v=20261020-layout2"></script>
+<script src="motion-config.js?v=20261020-layout2"></script>
+<script src="stimulus-patterns1.js?v=20261027-requested1"></script>
+<script src="kiemel-config.js?v=20261021-xrfix1"></script>
+<script src="kiemel-motion.js?v=20261021-xrfix1"></script>
+<script src="operator1.js?v=20261027-requested1"></script>
+</body></html>
+
+

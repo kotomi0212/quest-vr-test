@@ -3,7 +3,7 @@
 'use strict';
 const assert=require('node:assert/strict'), vm=require('node:vm'), fs=require('node:fs');
 const S=require('../stimulus-engine.js');
-const P=require('../stimulus-patterns.js');
+const P=require('../stimulus-patterns1.js');
 const L=require('../layout-config.js'),M=require('../motion-config.js');
 const KC=require('../kiemel-config.js'),KM=require('../kiemel-motion.js'),KE=require('../kiemel-environment.js');
 let now=0, tick, seq=0;
@@ -18,7 +18,9 @@ class Vector3 {
 }
 function element(){return {object3D:{position:new Vector3(),rotation:{x:0,y:0,z:0,set(x,y,z){Object.assign(this,{x,y,z});}},setRotationFromAxisAngle(axis,a){this.rotation.set(axis.x*a,axis.y*a,axis.z*a);},visible:true},dataset:{},style:{},setAttribute(){},addEventListener(){},setObject3D(k,v){this[k]=v;},getObject3D(k){return this[k];}};}
 const world=element(), room=element(), gridRoom=element(), noiseRoom=element(), gridFixation=element(), noiseFixation=element(), contrast=element(), surround=element(), camera=element(), kiemel=element();
-const elements={'#visual-world':world,'#room-pattern':room,'#grid-room-pattern':gridRoom,'#noise-room-pattern':noiseRoom,'#fixation-point':gridFixation,'#noise-fixation-point':noiseFixation,'#contrast-pattern':contrast,'#contrast-surround':surround,'a-camera':camera,'#kiemel-environment':kiemel};
+const sphereGroup=element(),sphere=element(),compact=element(),floorOnly=element(),compactFloor=element(),compactCeiling=element(),compactFront=element(),compactBack=element(),compactLeft=element(),compactRight=element(),requestedFloor=element();
+const elements={'#visual-world':world,'#room-pattern':room,'#grid-room-pattern':gridRoom,'#noise-room-pattern':noiseRoom,'#fixation-point':gridFixation,'#noise-fixation-point':noiseFixation,'#contrast-pattern':contrast,'#contrast-surround':surround,'a-camera':camera,'#kiemel-environment':kiemel,
+  '#red-sphere-fore-aft-pattern':sphereGroup,'#red-sphere':sphere,'#compact-grid-room-pattern':compact,'#grid-floor-only-pattern':floorOnly,'.compact-floor':compactFloor,'.compact-ceiling':compactCeiling,'.compact-front':compactFront,'.compact-back':compactBack,'.compact-left':compactLeft,'.compact-right':compactRight,'.requested-floor':requestedFloor};
 const scene={...element(),renderStarted:true,hasLoaded:true,camera:{},renderer:{xr:{isPresenting:false,getSession:()=>null},capabilities:{getMaxAnisotropy:()=>8}},is:()=>false,querySelector:s=>elements[s] || null};
 const nodes={};
 const events={};
@@ -42,7 +44,7 @@ const sandbox={window,document,AFRAME:{THREE,registerComponent:(name,c)=>{tick=c
   URLSearchParams,location:{search:'?preview=1',origin:'http://test'},parent,isSecureContext:false,navigator:{},
   performance:{now:()=>now,timeOrigin:100000},Date,console,setTimeout:()=>1,clearTimeout(){},setInterval(){},reportStartupError:e=>{throw Error(e);}};
 window.AFRAME=sandbox.AFRAME;
-vm.runInNewContext(fs.readFileSync(require('node:path').join(__dirname,'../quest-runtime.js'),'utf8'),sandbox);
+vm.runInNewContext(fs.readFileSync(require('node:path').join(__dirname,'../quest-runtime1.js'),'utf8'),sandbox);
 function command(type,extra={}){events.message({source:parent,origin:'http://test',data:{type:'stimulus-command',command:{type,seq:++seq,runId:'test-'+seq,durationSec:10,mode:'sine',amplitudeDeg:1,amplitudePpDeg:2,velocityDegSec:2,rampSec:.5,holdSec:1,pattern:'grid',heightCm:160,eyeHeightM:1.5,ankleHeightM:.088,hipHeightM:.9,rotationCenter:'ankle',...extra}}});}
 async function flush(){await Promise.resolve();await Promise.resolve();}
 (async()=>{
@@ -57,6 +59,11 @@ async function flush(){await Promise.resolve();await Promise.resolve();}
  command('configure',{pattern:'noise-room',fixationVisible:true});await flush();
  assert.equal(noiseRoom.object3D.visible,true);assert.equal(gridRoom.object3D.visible,false);assert.equal(noiseFixation.object3D.visible,true);assert.equal(noiseFixation.object3D.position.y,1.5);
  command('configure',{pattern:'grid-room',rotationCenter:'translation'});await flush();assert.equal(gridRoom.object3D.visible,true);
+ command('configure',{pattern:'red-sphere-fore-aft'});await flush();assert.equal(sphereGroup.object3D.visible,true);assert.equal(surround.object3D.visible,true);
+ command('configure',{pattern:'compact-grid-room'});await flush();assert.equal(compact.object3D.visible,true);assert.equal(compact.object3D.position.y,1.5);assert.equal(surround.object3D.visible,false);
+ command('start',{pattern:'compact-grid-room',frequencyHz:.1});await flush();now+=3001;tick();for(let i=0;i<250;i++){now+=10;tick();}
+ assert(Math.abs(world.object3D.rotation.x)>.0001);assert(Math.abs(world.object3D.position.z)>.01);command('emergency');await flush();
+ command('configure',{pattern:'grid-floor-only'});await flush();assert.equal(floorOnly.object3D.visible,true);assert.equal(floorOnly.object3D.position.y,1.5-1.6*1.7/2);
  command('configure',{pattern:'grid'});await flush();
  for(const mode of ['sine','multi10']) {
   command('start',{mode,frequencyHz:.2});await flush();
@@ -109,7 +116,7 @@ async function flush(){await Promise.resolve();await Promise.resolve();}
  window.VR_REMOTE_CONFIG={firebase:{},sessionId:'test'};
  vm.runInContext(fs.readFileSync(require('node:path').join(__dirname,'firebase-fixture.js'),'utf8'),ctx);
  ctx.firebase=window.firebase;
- vm.runInContext(fs.readFileSync(require('node:path').join(__dirname,'../quest-runtime.js'),'utf8'),ctx);
+ vm.runInContext(fs.readFileSync(require('node:path').join(__dirname,'../quest-runtime1.js'),'utf8'),ctx);
  events.load();for(let i=0;i<30;i++)await flush();
  const fixture=window.fixture, commandPath='sessions/test/command';
  function headset(type,extra={}){fixture.emit(commandPath,{type,seq:++seq,questInstanceId:fixture.lastStatus().instanceId,requestedAt:Date.now(),pattern:'grid',heightCm:160,ankleHeightM:.088,hipHeightM:.9,rotationCenter:'ankle',...extra});}

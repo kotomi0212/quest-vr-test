@@ -1,7 +1,7 @@
 'use strict';
 const assert=require('node:assert/strict'),vm=require('node:vm'),fs=require('node:fs'),path=require('node:path');
-const html=fs.readFileSync(path.join(__dirname,'../operator.html'),'utf8');
-const source=fs.readFileSync(path.join(__dirname,'../operator.js'),'utf8');
+const html=fs.readFileSync(path.join(__dirname,'../operator1.html'),'utf8');
+const source=fs.readFileSync(path.join(__dirname,'../operator1.js'),'utf8');
 const nodes={};
 for(const m of html.matchAll(/id="([^"]+)"/g))nodes[m[1]]={value:'',textContent:'',style:{},children:[],appendChild(n){this.children.push(n);},addEventListener(){},getAttribute(){return null;},setAttribute(){},removeAttribute(){},getContext(){return {clearRect(){},beginPath(){},lineTo(){},moveTo(){},stroke(){}};}};
 for(const m of source.matchAll(/\$\('([^']+)'\)/g))assert(nodes[m[1]],'Missing operator element '+m[1]);
@@ -11,7 +11,7 @@ function ref(p){return {child:n=>ref(p+'/'+n),on:(e,cb)=>{listeners[p]=cb;if(p==
 const auth={onAuthStateChanged:cb=>cb({uid:'operator',isAnonymous:false})};
 const database=()=>({ref});database.ServerValue={TIMESTAMP:{'.sv':'timestamp'}};
 const firebase={initializeApp(){},auth:()=>auth,database};
-const context={window:{firebase,VR_REMOTE_CONFIG:{firebase:{},sessionId:'test'},addEventListener(){}},firebase,document:{getElementById:id=>nodes[id],createElement:()=>({click(){}})},Stimulus:require('../stimulus-engine.js'),StimulusPatterns:require('../stimulus-patterns.js'),layoutConfig:require('../layout-config.js'),motionConfig:require('../motion-config.js'),KiemelConfig:require('../kiemel-config.js'),KiemelMotion:require('../kiemel-motion.js'),crypto:require('node:crypto').webcrypto,Date,Number,location:{origin:'http://test'},setInterval(){},setTimeout:fn=>fn(),Blob,URL:{createObjectURL:blob=>{csvBlob=blob;return'test-blob';},revokeObjectURL(){}}};
+const context={window:{firebase,VR_REMOTE_CONFIG:{firebase:{},sessionId:'test'},addEventListener(){}},firebase,document:{getElementById:id=>nodes[id],createElement:()=>({click(){}})},Stimulus:require('../stimulus-engine.js'),StimulusPatterns:require('../stimulus-patterns1.js'),layoutConfig:require('../layout-config.js'),motionConfig:require('../motion-config.js'),KiemelConfig:require('../kiemel-config.js'),KiemelMotion:require('../kiemel-motion.js'),crypto:require('node:crypto').webcrypto,Date,Number,location:{origin:'http://test'},setInterval(){},setTimeout:fn=>fn(),Blob,URL:{createObjectURL:blob=>{csvBlob=blob;return'test-blob';},revokeObjectURL(){}}};
 vm.runInNewContext(source,context);
 assert.equal(nodes.pattern.value,'grid-room');
 assert.equal(context.StimulusPatterns.defaultPattern,'grid-room');
@@ -27,7 +27,8 @@ listeners['sessions/test/status']({val:()=>({instanceId:'quest',at:Date.now(),fi
  await nodes.stop.onclick();assert.equal(writes.at(-1).type,'return');
  await nodes.emergency.onclick();assert.equal(writes.at(-1).type,'emergency');
  nodes.pattern.value='room';await nodes.pattern.onchange();assert.equal(writes.at(-1).type,'configure');assert.equal(writes.at(-1).pattern,'room');
- assert.deepEqual(nodes.pattern.children.map(n=>n.value),['grid-room','noise-room']);
+ assert.deepEqual(nodes.pattern.children.map(n=>n.value),['grid-room','noise-room','red-sphere-fore-aft','compact-grid-room','grid-floor-only']);
+ nodes.pattern.value='compact-grid-room';await nodes.pattern.onchange();assert.equal(nodes.freq.value,'0.1');assert.equal(nodes.amp.value,'2');assert.equal(writes.at(-1).pattern,'compact-grid-room');
  const common={};
  for(const pattern of ['noise-1f','stripes-high','stripes-low']) {
   nodes.pattern.value=pattern;await nodes.pattern.onchange();assert.equal(writes.at(-1).pattern,pattern);

@@ -1,0 +1,176 @@
+<!doctype html>
+<html lang="ja"><head>
+<meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Quest 視覚刺激表示・パイロット</title>
+<script>
+window.vrLastError='';
+function reportStartupError(text){
+ window.vrLastError=String(text);
+ const n=document.getElementById('startup-error');
+ if(n){n.hidden=false;n.textContent='起動エラー：'+window.vrLastError;}
+}
+window.addEventListener('error',e=>{if(e.message)reportStartupError(e.message);},true);
+window.addEventListener('unhandledrejection',e=>reportStartupError([e.reason?.message||e.reason,e.reason?.cause?.message].filter(Boolean).join(' / ')));
+</script>
+<script defer crossorigin="anonymous" src="https://aframe.io/releases/1.7.0/aframe.min.js" onerror="reportStartupError('A-Frameの取得に失敗しました。ネットワークを確認してください。')"></script>
+<style>body{margin:0;font-family:system-ui;background:#edf4f7}#info{position:fixed;top:8px;left:8px;z-index:10;background:#ffffffdc;border-radius:9px;padding:10px 14px;max-width:440px;font-size:14px}#info b{display:block}#info small{display:block}</style>
+</head><body>
+<div id="info"><b>室内版・XR状態確認対応</b><span id="status">室内を準備しています…</span>
+<small id="diagnostics" aria-live="polite">3D描画・WebXRを確認中…</small>
+<small>右下の標準VRボタンで開始。その後の位置合わせ・刺激操作はPCから行います。</small></div>
+<div id="startup-error" hidden style="position:fixed;bottom:72px;left:12px;right:12px;z-index:100;background:#fff1f0;color:#9c2222;padding:12px;font:14px system-ui"></div>
+<template id="scene-template">
+<a-scene webxr="referenceSpaceType: local-floor" stimulus-driver background="color: #e8eef7" xr-mode-ui="enabled: true">
+  <a-assets><canvas id="noise-room-texture" width="512" height="512"></canvas></a-assets>
+  <!-- Approximate modern room: dimensions and furnishings are design choices, not recovered from the paper. Origin = ankle/floor. -->
+  <a-entity id="visual-world">
+    <a-entity id="grid-room-pattern" visible="false">
+      <a-plane position="0 0 0" rotation="-90 0 0" width="8" height="8" material="src: url(grid.svg); shader: flat; repeat: 8 8"></a-plane>
+      <a-plane position="0 4 0" rotation="90 0 0" width="8" height="8" material="src: url(grid.svg); shader: flat; repeat: 8 8"></a-plane>
+      <a-plane position="0 2 -4" width="8" height="4" material="src: url(grid.svg); shader: flat; repeat: 8 4"></a-plane>
+      <a-plane position="0 2 4" rotation="0 180 0" width="8" height="4" material="src: url(grid.svg); shader: flat; repeat: 8 4"></a-plane>
+      <a-plane position="-4 2 0" rotation="0 90 0" width="8" height="4" material="src: url(grid.svg); shader: flat; repeat: 8 4"></a-plane>
+      <a-plane position="4 2 0" rotation="0 -90 0" width="8" height="4" material="src: url(grid.svg); shader: flat; repeat: 8 4"></a-plane>
+      <a-circle id="fixation-point" position="0 1.5 -3.98" radius="0.025" color="#e32636"
+        material="shader: flat; depthTest: false; depthWrite: false"></a-circle>
+    </a-entity>
+    <a-entity id="noise-room-pattern" visible="false">
+      <a-plane position="0 0 0" rotation="-90 0 0" width="8" height="8" material="src: #noise-room-texture; shader: flat"></a-plane>
+      <a-plane position="0 4 0" rotation="90 0 0" width="8" height="8" material="src: #noise-room-texture; shader: flat"></a-plane>
+      <a-plane position="0 2 -4" width="8" height="4" material="src: #noise-room-texture; shader: flat; repeat: 2 1"></a-plane>
+      <a-plane position="0 2 4" rotation="0 180 0" width="8" height="4" material="src: #noise-room-texture; shader: flat; repeat: 2 1"></a-plane>
+      <a-plane position="-4 2 0" rotation="0 90 0" width="8" height="4" material="src: #noise-room-texture; shader: flat; repeat: 2 1"></a-plane>
+      <a-plane position="4 2 0" rotation="0 -90 0" width="8" height="4" material="src: #noise-room-texture; shader: flat; repeat: 2 1"></a-plane>
+      <a-circle id="noise-fixation-point" position="0 1.5 -3.98" radius="0.025" color="#e32636"
+        material="shader: flat; depthTest: false; depthWrite: false"></a-circle>
+    </a-entity>
+    <!-- Requested stimuli. The compact room is centered vertically on calibrated eye height. -->
+    <a-entity id="red-sphere-fore-aft-pattern" visible="false">
+      <a-sphere id="red-sphere" position="0 1.5 -1.5" radius="0.03" segments-width="32" segments-height="20"
+        color="#e01820" material="shader: standard; roughness: 0.75; metalness: 0"></a-sphere>
+      <a-entity light="type: ambient; intensity: 0.8"></a-entity>
+      <a-entity light="type: directional; intensity: 0.7" position="-1 2 1"></a-entity>
+    </a-entity>
+    <a-entity id="compact-grid-room-pattern" visible="false">
+      <a-plane class="compact-floor" position="0 -1.445 0" rotation="-90 0 0" width="6" height="6" material="src: url(grid.svg); shader: flat; repeat: 12 12"></a-plane>
+      <a-plane class="compact-ceiling" position="0 1.445 0" rotation="90 0 0" width="6" height="6" material="src: url(grid.svg); shader: flat; repeat: 12 12"></a-plane>
+      <a-plane class="compact-front" position="0 0 -3" width="6" height="2.89" material="src: url(grid.svg); shader: flat; repeat: 12 5.78"></a-plane>
+      <a-plane class="compact-back" position="0 0 3" rotation="0 180 0" width="6" height="2.89" material="src: url(grid.svg); shader: flat; repeat: 12 5.78"></a-plane>
+      <a-plane class="compact-left" position="-3 0 0" rotation="0 90 0" width="6" height="2.89" material="src: url(grid.svg); shader: flat; repeat: 12 5.78"></a-plane>
+      <a-plane class="compact-right" position="3 0 0" rotation="0 -90 0" width="6" height="2.89" material="src: url(grid.svg); shader: flat; repeat: 12 5.78"></a-plane>
+    </a-entity>
+    <a-entity id="grid-floor-only-pattern" visible="false">
+      <a-plane class="requested-floor" position="0 0 0" rotation="-90 0 0" width="6" height="6" material="src: url(grid.svg); shader: flat; repeat: 12 12"></a-plane>
+    </a-entity>
+    <a-entity id="room-pattern">
+    <a-box position="0 -0.06 -3" width="10" height="0.12" depth="12" color="#b59b7c"></a-box>
+    <a-box position="0 3.5 -3" width="10" height="0.1" depth="12" color="#f0eee9"></a-box>
+    <a-box position="-5 1.75 -3" width="0.12" height="3.5" depth="12" color="#e4e1da"></a-box>
+    <a-box position="5 1.75 -3" width="0.12" height="3.5" depth="12" color="#d8dfe0"></a-box>
+    <a-box position="0 1.75 -9" width="10" height="3.5" depth="0.12" color="#ede9e1"></a-box>
+    <a-box position="0 1.75 3" width="10" height="3.5" depth="0.12" color="#ede9e1"></a-box>
+    <a-plane position="0 0.015 -4.3" rotation="-90 0 0" width="4.6" height="3.2" color="#829496"></a-plane>
+    <!-- Left: sofa and framed artwork -->
+    <a-box position="-3.2 0.4 -3.5" width="1.5" height="0.65" depth="3" color="#747f86"></a-box>
+    <a-box position="-3.8 0.85 -3.5" width="0.3" height="1.1" depth="3" color="#65717a"></a-box>
+    <a-box position="-3.2 0.75 -2" width="1.5" height="0.55" depth="0.22" color="#65717a"></a-box>
+    <a-box position="-3.2 0.75 -5" width="1.5" height="0.55" depth="0.22" color="#65717a"></a-box>
+    <a-box position="-4.91 2.15 -4" width="0.05" height="1.2" depth="1.9" color="#51463b"></a-box>
+    <a-box position="-4.87 2.15 -4" width="0.04" height="1.02" depth="1.72" color="#a7bbb4"></a-box>
+    <!-- Coffee table -->
+    <a-box position="-0.5 0.55 -4" width="1.9" height="0.12" depth="1" color="#715744"></a-box>
+    <a-box position="-1.2 0.27 -4" width="0.1" height="0.54" depth="0.8" color="#383c40"></a-box>
+    <a-box position="0.2 0.27 -4" width="0.1" height="0.54" depth="0.8" color="#383c40"></a-box>
+    <a-box position="-0.7 0.65 -4" width="0.45" height="0.08" depth="0.3" color="#e4d8c1"></a-box>
+    <!-- Back: window and right-side cabinet -->
+    <a-box position="-2.5 2 -8.9" width="3" height="1.9" depth="0.1" color="#627681"></a-box>
+    <a-box position="-2.5 2 -8.82" width="2.8" height="1.7" depth="0.04" color="#b5d6e4" material="shader: flat"></a-box>
+    <a-box position="-2.5 2 -8.77" width="0.07" height="1.7" depth="0.05" color="#f7f5ee"></a-box>
+    <a-box position="-2.5 2 -8.77" width="2.8" height="0.07" depth="0.05" color="#f7f5ee"></a-box>
+    <a-box position="2.7 0.6 -8" width="3" height="1.2" depth="0.65" color="#997f61"></a-box>
+    <a-box position="2.6 1.9 -8.87" width="2.5" height="1.25" depth="0.1" color="#303c44"></a-box>
+    <a-box position="2.6 1.9 -8.79" width="2.3" height="1.06" depth="0.03" color="#71818a"></a-box>
+<a-box position="0 0.008 -8.50" width="9.9" height="0.008" depth="0.016" color="#8d765d"></a-box>
+<a-box position="0 0.008 -7.90" width="9.9" height="0.008" depth="0.016" color="#8d765d"></a-box>
+<a-box position="0 0.008 -7.30" width="9.9" height="0.008" depth="0.016" color="#8d765d"></a-box>
+<a-box position="0 0.008 -6.70" width="9.9" height="0.008" depth="0.016" color="#8d765d"></a-box>
+<a-box position="0 0.008 -6.10" width="9.9" height="0.008" depth="0.016" color="#8d765d"></a-box>
+<a-box position="0 0.008 -5.50" width="9.9" height="0.008" depth="0.016" color="#8d765d"></a-box>
+<a-box position="0 0.008 -4.90" width="9.9" height="0.008" depth="0.016" color="#8d765d"></a-box>
+<a-box position="0 0.008 -4.30" width="9.9" height="0.008" depth="0.016" color="#8d765d"></a-box>
+<a-box position="0 0.008 -3.70" width="9.9" height="0.008" depth="0.016" color="#8d765d"></a-box>
+<a-box position="0 0.008 -3.10" width="9.9" height="0.008" depth="0.016" color="#8d765d"></a-box>
+<a-box position="0 0.008 -2.50" width="9.9" height="0.008" depth="0.016" color="#8d765d"></a-box>
+<a-box position="0 0.008 -1.90" width="9.9" height="0.008" depth="0.016" color="#8d765d"></a-box>
+<a-box position="0 0.008 -1.30" width="9.9" height="0.008" depth="0.016" color="#8d765d"></a-box>
+<a-box position="0 0.008 -0.70" width="9.9" height="0.008" depth="0.016" color="#8d765d"></a-box>
+<a-box position="0 0.008 -0.10" width="9.9" height="0.008" depth="0.016" color="#8d765d"></a-box>
+<a-box position="0 0.008 0.50" width="9.9" height="0.008" depth="0.016" color="#8d765d"></a-box>
+<a-box position="0 0.008 1.10" width="9.9" height="0.008" depth="0.016" color="#8d765d"></a-box>
+<a-box position="0 0.008 1.70" width="9.9" height="0.008" depth="0.016" color="#8d765d"></a-box>
+<a-box position="0 0.008 2.30" width="9.9" height="0.008" depth="0.016" color="#8d765d"></a-box>
+<a-box position="0 0.008 2.90" width="9.9" height="0.008" depth="0.016" color="#8d765d"></a-box>
+<a-box position="-4.5 0.009 -3" width="0.014" height="0.009" depth="11.9" color="#a18a70"></a-box>
+<a-box position="-3.5 0.009 -3" width="0.014" height="0.009" depth="11.9" color="#a18a70"></a-box>
+<a-box position="-2.5 0.009 -3" width="0.014" height="0.009" depth="11.9" color="#a18a70"></a-box>
+<a-box position="-1.5 0.009 -3" width="0.014" height="0.009" depth="11.9" color="#a18a70"></a-box>
+<a-box position="-0.5 0.009 -3" width="0.014" height="0.009" depth="11.9" color="#a18a70"></a-box>
+<a-box position="0.5 0.009 -3" width="0.014" height="0.009" depth="11.9" color="#a18a70"></a-box>
+<a-box position="1.5 0.009 -3" width="0.014" height="0.009" depth="11.9" color="#a18a70"></a-box>
+<a-box position="2.5 0.009 -3" width="0.014" height="0.009" depth="11.9" color="#a18a70"></a-box>
+<a-box position="3.5 0.009 -3" width="0.014" height="0.009" depth="11.9" color="#a18a70"></a-box>
+<a-box position="4.5 0.009 -3" width="0.014" height="0.009" depth="11.9" color="#a18a70"></a-box>
+<a-box position="4.5 1.25 -6.9" width="0.55" height="2.5" depth="2.5" color="#675442"></a-box>
+<a-box position="4.15 0.25 -6.9" width="0.8" height="0.07" depth="2.5" color="#ccb89a"></a-box>
+<a-box position="4.1 0.50 -7.90" width="0.35" height="0.42" depth="0.14" color="#778f9b"></a-box>
+<a-box position="4.1 0.50 -7.58" width="0.35" height="0.42" depth="0.14" color="#b08d72"></a-box>
+<a-box position="4.1 0.50 -7.26" width="0.35" height="0.42" depth="0.14" color="#d8c9a5"></a-box>
+<a-box position="4.1 0.50 -6.94" width="0.35" height="0.42" depth="0.14" color="#778f9b"></a-box>
+<a-box position="4.1 0.50 -6.62" width="0.35" height="0.42" depth="0.14" color="#b08d72"></a-box>
+<a-box position="4.1 0.50 -6.30" width="0.35" height="0.42" depth="0.14" color="#d8c9a5"></a-box>
+<a-box position="4.15 0.85 -6.9" width="0.8" height="0.07" depth="2.5" color="#ccb89a"></a-box>
+<a-box position="4.1 1.10 -7.90" width="0.35" height="0.42" depth="0.14" color="#778f9b"></a-box>
+<a-box position="4.1 1.10 -7.58" width="0.35" height="0.42" depth="0.14" color="#b08d72"></a-box>
+<a-box position="4.1 1.10 -7.26" width="0.35" height="0.42" depth="0.14" color="#d8c9a5"></a-box>
+<a-box position="4.1 1.10 -6.94" width="0.35" height="0.42" depth="0.14" color="#778f9b"></a-box>
+<a-box position="4.1 1.10 -6.62" width="0.35" height="0.42" depth="0.14" color="#b08d72"></a-box>
+<a-box position="4.1 1.10 -6.30" width="0.35" height="0.42" depth="0.14" color="#d8c9a5"></a-box>
+<a-box position="4.15 1.45 -6.9" width="0.8" height="0.07" depth="2.5" color="#ccb89a"></a-box>
+<a-box position="4.1 1.70 -7.90" width="0.35" height="0.42" depth="0.14" color="#778f9b"></a-box>
+<a-box position="4.1 1.70 -7.58" width="0.35" height="0.42" depth="0.14" color="#b08d72"></a-box>
+<a-box position="4.1 1.70 -7.26" width="0.35" height="0.42" depth="0.14" color="#d8c9a5"></a-box>
+<a-box position="4.1 1.70 -6.94" width="0.35" height="0.42" depth="0.14" color="#778f9b"></a-box>
+<a-box position="4.1 1.70 -6.62" width="0.35" height="0.42" depth="0.14" color="#b08d72"></a-box>
+<a-box position="4.1 1.70 -6.30" width="0.35" height="0.42" depth="0.14" color="#d8c9a5"></a-box>
+<a-box position="4.15 2.05 -6.9" width="0.8" height="0.07" depth="2.5" color="#ccb89a"></a-box>
+<a-box position="4.1 2.30 -7.90" width="0.35" height="0.42" depth="0.14" color="#778f9b"></a-box>
+<a-box position="4.1 2.30 -7.58" width="0.35" height="0.42" depth="0.14" color="#b08d72"></a-box>
+<a-box position="4.1 2.30 -7.26" width="0.35" height="0.42" depth="0.14" color="#d8c9a5"></a-box>
+<a-box position="4.1 2.30 -6.94" width="0.35" height="0.42" depth="0.14" color="#778f9b"></a-box>
+<a-box position="4.1 2.30 -6.62" width="0.35" height="0.42" depth="0.14" color="#b08d72"></a-box>
+<a-box position="4.1 2.30 -6.30" width="0.35" height="0.42" depth="0.14" color="#d8c9a5"></a-box>
+    <!-- Lighting -->
+    <a-entity light="type: ambient; intensity: 0.85; color: #fff5e6"></a-entity>
+    <a-entity light="type: directional; intensity: 0.65" position="-2 3 1"></a-entity>
+  </a-entity>
+    <a-entity id="contrast-pattern" visible="false"></a-entity>
+  </a-entity>
+  <!-- Keep the unpatterned surround white in immersive VR as well as desktop. -->
+  <a-entity id="kiemel-environment" visible="false"></a-entity>
+  <a-sky id="contrast-surround" color="#ffffff" material="shader: flat" visible="false"></a-sky>
+  <a-entity position="0 0 0"><a-camera wasd-controls="enabled: false" look-controls="enabled: true"></a-camera></a-entity>
+</a-scene>
+</template>
+<script defer src="stimulus-engine.js?v=20261022-smooth10"></script>
+<script defer src="pattern-config1.js?v=20261027-requested1"></script>
+<script defer src="layout-config.js?v=20261020-layout2"></script>
+<script defer src="motion-config.js?v=20261020-layout2"></script>
+<script defer src="stimulus-patterns1.js?v=20261027-requested1"></script>
+<script defer src="kiemel-config.js?v=20261021-xrfix1"></script>
+<script defer src="kiemel-motion.js?v=20261021-xrfix1"></script>
+<script defer src="kiemel-environment.js?v=20261021-xrfix1"></script>
+<script defer src="kiemel-projection.js?v=20261021-xrfix1"></script>
+<script defer src="quest-runtime1.js?v=20261027-requested1"></script>
+</body></html>
+
+
