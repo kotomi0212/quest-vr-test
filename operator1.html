@@ -35,7 +35,7 @@
 <label>再生時間 (秒)</label><input id="duration" type="number" min="5" max="600" step="5" value="60">
 </fieldset><canvas id="waveform" width="640" height="160" style="width:100%;background:#f5f5f5"></canvas><p id="waveError"></p>
 <div class="controls"><button id="start" class="primary">START（3秒後開始）</button><button id="stop" class="danger">STOP（2秒でBaselineへ）</button></div>
-<p><button id="emergency" class="danger">緊急停止（即時0°）</button> <button id="retry">接続再試行（PC再読込）</button> <span id="pcConnection"></span></p><p><button id="baseline">Baseline開始</button> <button id="csvDownload">ログCSV出力</button> <button id="timeLogDownload">PC時刻・映像履歴CSV</button></p><p id="timeLogState" class="muted">PC時刻履歴：まだ記録がありません</p><p id="log" class="action-feedback" role="status" aria-live="polite">STARTで開始、STOPで停止します。</p><p><button id="download">Questが保存した刺激ログを取得（JSON）</button></p>
+<p><button id="emergency" class="danger">緊急停止（即時0°）</button> <button id="retry">接続再試行（PC再読込）</button> <span id="pcConnection"></span></p><p><button id="baseline">Baseline開始</button> <button id="csvDownload">ログCSV出力</button> <button id="timeLogDownload">PC時刻・映像履歴CSV</button></p><p><a href="imu-sync1.html" target="_blank">頭部IMU・映像同期ビューアを開く</a></p><p id="timeLogState" class="muted">PC時刻履歴：まだ記録がありません</p><p id="log" class="action-feedback" role="status" aria-live="polite">STARTで開始、STOPで停止します。</p><p><button id="download">Questが保存した刺激ログを取得（JSON）</button></p>
 </section>
 <script src="stimulus-engine.js?v=20261022-smooth10"></script>
 <script src="pattern-config1.js?v=20261027-requested1"></script>
