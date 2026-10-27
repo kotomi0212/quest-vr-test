@@ -51,6 +51,20 @@
   const auth = firebase.auth(), db = firebase.database(), root = db.ref('sessions/' + config.sessionId);
   let quest = null, lastSeq = 0, awaiting = null, subscribed = false, serverOffset = 0;
   let previewReady = false;
+  const timeLogKey='quest1-presentation-history-v1';
+  let presentationHistory=[];
+  try{presentationHistory=JSON.parse(localStorage.getItem(timeLogKey)||'[]');if(!Array.isArray(presentationHistory))presentationHistory=[];}catch(_){presentationHistory=[];}
+  const pcTime=()=>{const d=new Date(),p=n=>String(n).padStart(2,'0'),ms=String(d.getMilliseconds()).padStart(3,'0'),off=-d.getTimezoneOffset(),sign=off>=0?'+':'-';return `${d.getFullYear()}-${p(d.getMonth()+1)}-${p(d.getDate())} ${p(d.getHours())}:${p(d.getMinutes())}:${p(d.getSeconds())}.${ms} ${sign}${p(Math.floor(Math.abs(off)/60))}:${p(Math.abs(off)%60)}`;};
+  const savePresentationHistory=()=>{try{localStorage.setItem(timeLogKey,JSON.stringify(presentationHistory));}catch(_){}const last=presentationHistory.at(-1);$('timeLogState').textContent=last?`PC時刻履歴：${presentationHistory.length}件 / 最新 ${last.startPcTime} / ${last.patternLabel}${last.endPcTime?' ～ '+last.endPcTime:'（再生中）'}`:'PC時刻履歴：まだ記録がありません';};
+  function recordPresentation(v){
+    if(!v)return;
+    const activeStatuses=new Set(['loading','countdown','pre-static','running','post-static','returning']);
+    const runId=v.runId||v.lastRunId;
+    let row=runId&&presentationHistory.find(item=>item.runId===runId);
+    if(v.runId&&activeStatuses.has(v.status)&&!row){row={runId:v.runId,pattern:v.pattern||'unknown',patternLabel:StimulusPatterns.get(v.pattern)?.label||v.pattern||'不明',mode:v.kiemelCondition||'',startPcTime:pcTime(),startPcEpochMs:Date.now(),endPcTime:'',endPcEpochMs:'',endReason:''};presentationHistory.push(row);savePresentationHistory();}
+    if(row&&!row.endPcTime&&['idle','blocked','log-error'].includes(v.status)){row.endPcTime=pcTime();row.endPcEpochMs=Date.now();row.endReason=v.reason||v.error||v.status;savePresentationHistory();}
+  }
+  savePresentationHistory();
   db.ref('.info/connected').on('value', snap => { $('pcConnection').textContent = snap.val() ? 'PC Firebase: 接続済み' : 'PC Firebase: 切断'; });
   $('retry').onclick = () => location.reload();
   $('estimateAnkle').onclick = () => { const h=Number($('heightCm').value);$('ankleCm').value=(h*.039).toFixed(1);$('hipCm').value=(h*.53).toFixed(1); };
@@ -87,6 +101,7 @@
   function receive(snap) {
     quest = snap.val();
     const v = quest;
+    recordPresentation(v);
     if(v?.calibration) { $('measuredEye').textContent='Quest目高: '+v.calibration.measuredEyeHeightM+' m / 足関節: '+v.calibration.manualAnkleHeightM+' m / 股関節: '+(v.calibration.manualHipHeightM ?? '-')+' m / 回転中心: '+(v.calibration.rotationCenter || '-')+(v.calibration.kiemel?' / l1='+v.calibration.kiemel.l1+' m / l2='+v.calibration.kiemel.l2+' m / 入力眼高との差='+v.calibration.kiemel.inputEyeMinusTrackedEyeM+' m':''); }
     $('state').textContent = v ? v.status + ' / ' + (v.runId || v.lastRunId || '-') + ' / 適用角度 ' + Number(v.appliedAngleDeg || 0).toFixed(3) + '° / 映像: ' + (StimulusPatterns.get(v.pattern)?.label || v.pattern || '不明')+(v.kiemelCondition?' / '+v.kiemelCondition+' / 前後移動='+Number(v.translationZ||0).toFixed(5)+' m':'')+(v.kiemelPhase?' / '+v.kiemelPhase+' / 経過 '+Number(v.elapsedSeconds||0).toFixed(1)+'秒 / 描画 '+(v.renderedFrames||0)+' frames':'') : 'Quest未接続';
     $('questDiagnostics').textContent = v ?
@@ -182,6 +197,7 @@
   $('applyPattern').onclick = () => dispatch('configure');
   $('fixationVisible').onchange = () => dispatch('configure');
   $('ampPreset').onchange = () => {$('amp').value=$('ampPreset').value;drawWave();};
+  $('timeLogDownload').onclick=()=>{const rows=[['start_pc_time','end_pc_time','pattern','pattern_label','mode','run_id','start_pc_epoch_ms','end_pc_epoch_ms','end_reason'],...presentationHistory.map(x=>[x.startPcTime,x.endPcTime,x.pattern,x.patternLabel,x.mode,x.runId,x.startPcEpochMs,x.endPcEpochMs,x.endReason])],text=rows.map(r=>r.map(v=>'"'+String(v??'').replaceAll('"','""')+'"').join(',')).join('\r\n'),a=document.createElement('a');a.href=URL.createObjectURL(new Blob(['\uFEFF'+text],{type:'text/csv'}));a.download='quest1-pc-time-history.csv';a.click();setTimeout(()=>URL.revokeObjectURL(a.href),1000);};
   $('csvDownload').onclick = async () => { try {
     const logs=(await root.child('logs').get()).val()||{},entries=[];
     for(const user of Object.values(logs))for(const [id,log] of Object.entries(user))entries.push({id,log,columns:log.sampleColumns||((log.samples?.[0]?.length||0)<=2?['elapsed_ms','applied_deg']:['elapsed_ms','applied_deg','commanded_deg','performance_ms','epoch_estimate_ms'])});

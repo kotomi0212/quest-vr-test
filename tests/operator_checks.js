@@ -11,12 +11,16 @@ function ref(p){return {child:n=>ref(p+'/'+n),on:(e,cb)=>{listeners[p]=cb;if(p==
 const auth={onAuthStateChanged:cb=>cb({uid:'operator',isAnonymous:false})};
 const database=()=>({ref});database.ServerValue={TIMESTAMP:{'.sv':'timestamp'}};
 const firebase={initializeApp(){},auth:()=>auth,database};
-const context={window:{firebase,VR_REMOTE_CONFIG:{firebase:{},sessionId:'test'},addEventListener(){}},firebase,document:{getElementById:id=>nodes[id],createElement:()=>({click(){}})},Stimulus:require('../stimulus-engine.js'),StimulusPatterns:require('../stimulus-patterns1.js'),layoutConfig:require('../layout-config.js'),motionConfig:require('../motion-config.js'),KiemelConfig:require('../kiemel-config.js'),KiemelMotion:require('../kiemel-motion.js'),crypto:require('node:crypto').webcrypto,Date,Number,location:{origin:'http://test'},setInterval(){},setTimeout:fn=>fn(),Blob,URL:{createObjectURL:blob=>{csvBlob=blob;return'test-blob';},revokeObjectURL(){}}};
+const localValues={},localStorage={getItem:k=>localValues[k]??null,setItem:(k,v)=>{localValues[k]=v;}};
+const context={window:{firebase,VR_REMOTE_CONFIG:{firebase:{},sessionId:'test'},addEventListener(){}},firebase,document:{getElementById:id=>nodes[id],createElement:()=>({click(){}})},Stimulus:require('../stimulus-engine.js'),StimulusPatterns:require('../stimulus-patterns1.js'),layoutConfig:require('../layout-config.js'),motionConfig:require('../motion-config.js'),KiemelConfig:require('../kiemel-config.js'),KiemelMotion:require('../kiemel-motion.js'),crypto:require('node:crypto').webcrypto,Date,Number,localStorage,location:{origin:'http://test'},setInterval(){},setTimeout:fn=>fn(),Blob,URL:{createObjectURL:blob=>{csvBlob=blob;return'test-blob';},revokeObjectURL(){}}};
 vm.runInNewContext(source,context);
 assert.equal(nodes.pattern.value,'grid-room');
 assert.equal(context.StimulusPatterns.defaultPattern,'grid-room');
 listeners['sessions/test/status']({val:()=>({instanceId:'quest',at:Date.now(),firebaseState:'接続済み',immersive:true,renderStarted:true,calibrated:true})});
 (async()=>{
+ listeners['sessions/test/status']({val:()=>({status:'running',runId:'time-test',pattern:'compact-grid-room',instanceId:'quest',at:Date.now(),firebaseState:'接続済み',immersive:true,renderStarted:true,calibrated:true})});
+ listeners['sessions/test/status']({val:()=>({status:'idle',lastRunId:'time-test',pattern:'compact-grid-room',reason:'completed',instanceId:'quest',at:Date.now(),firebaseState:'接続済み',immersive:true,renderStarted:true,calibrated:true})});
+ const timeRows=JSON.parse(localValues['quest1-presentation-history-v1']);assert.equal(timeRows.length,1);assert.equal(timeRows[0].pattern,'compact-grid-room');assert(timeRows[0].startPcTime&&timeRows[0].endPcTime);
  nodes.pattern.value='grid';await nodes.start.onclick();assert.equal(writes.at(-1).mode,'sine');assert.equal(writes.at(-1).pattern,'grid');
  nodes.mode.value='sine';await nodes.start.onclick();assert.equal(writes.at(-1).mode,'sine');
  nodes.mode.value='multi10';await nodes.mode.onchange();await nodes.start.onclick();assert.equal(writes.at(-1).mode,'multi10');assert.equal(writes.at(-1).amplitudePpDeg,2);
