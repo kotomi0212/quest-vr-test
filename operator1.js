@@ -54,7 +54,7 @@
   const timeLogKey='quest1-presentation-history-v1';
   let presentationHistory=[];
   try{presentationHistory=JSON.parse(localStorage.getItem(timeLogKey)||'[]');if(!Array.isArray(presentationHistory))presentationHistory=[];}catch(_){presentationHistory=[];}
-  const pcTime=()=>{const d=new Date(),p=n=>String(n).padStart(2,'0'),ms=String(d.getMilliseconds()).padStart(3,'0'),off=-d.getTimezoneOffset(),sign=off>=0?'+':'-';return `${d.getFullYear()}-${p(d.getMonth()+1)}-${p(d.getDate())} ${p(d.getHours())}:${p(d.getMinutes())}:${p(d.getSeconds())}.${ms} ${sign}${p(Math.floor(Math.abs(off)/60))}:${p(Math.abs(off)%60)}`;};
+  const pcTime=(epochMs=Date.now())=>{const d=new Date(epochMs),p=n=>String(n).padStart(2,'0'),ms=String(d.getMilliseconds()).padStart(3,'0'),off=-d.getTimezoneOffset(),sign=off>=0?'+':'-';return `${d.getFullYear()}-${p(d.getMonth()+1)}-${p(d.getDate())} ${p(d.getHours())}:${p(d.getMinutes())}:${p(d.getSeconds())}.${ms} ${sign}${p(Math.floor(Math.abs(off)/60))}:${p(Math.abs(off)%60)}`;};
   const savePresentationHistory=()=>{try{localStorage.setItem(timeLogKey,JSON.stringify(presentationHistory));}catch(_){}const last=presentationHistory.at(-1);$('timeLogState').textContent=last?`PC時刻履歴：${presentationHistory.length}件 / 最新 ${last.startPcTime} / ${last.patternLabel}${last.endPcTime?' ～ '+last.endPcTime:'（再生中）'}`:'PC時刻履歴：まだ記録がありません';};
   function recordPresentation(v){
     if(!v)return;
@@ -63,6 +63,20 @@
     let row=runId&&presentationHistory.find(item=>item.runId===runId);
     if(v.runId&&activeStatuses.has(v.status)&&!row){row={runId:v.runId,pattern:v.pattern||'unknown',patternLabel:StimulusPatterns.get(v.pattern)?.label||v.pattern||'不明',mode:v.kiemelCondition||'',startPcTime:pcTime(),startPcEpochMs:Date.now(),endPcTime:'',endPcEpochMs:'',endReason:''};presentationHistory.push(row);savePresentationHistory();}
     if(row&&!row.endPcTime&&['idle','blocked','log-error'].includes(v.status)){row.endPcTime=pcTime();row.endPcEpochMs=Date.now();row.endReason=v.reason||v.error||v.status;savePresentationHistory();}
+  }
+  async function recoverPresentationHistory(){
+    try{
+      const logs=(await root.child('logs').get()).val()||{};let recovered=0;
+      for(const userLogs of Object.values(logs))for(const [runId,log] of Object.entries(userLogs||{})){
+        const start=Number(log.startedAtQuestWallClockMs),end=Number(log.endedAtQuestWallClockMs);
+        if(!Number.isFinite(start))continue;
+        let row=presentationHistory.find(item=>item.runId===runId);
+        if(!row){row={runId,pattern:log.pattern||'unknown',patternLabel:StimulusPatterns.get(log.pattern)?.label||log.pattern||'不明',mode:log.mode||'',startPcTime:pcTime(start),startPcEpochMs:start,endPcTime:Number.isFinite(end)?pcTime(end):'',endPcEpochMs:Number.isFinite(end)?end:'',endReason:log.reason||'recovered-from-quest-log'};presentationHistory.push(row);recovered++;}
+        else if(!row.endPcTime&&Number.isFinite(end)){row.endPcTime=pcTime(end);row.endPcEpochMs=end;row.endReason=log.reason||row.endReason;}
+      }
+      presentationHistory.sort((a,b)=>Number(a.startPcEpochMs)-Number(b.startPcEpochMs));savePresentationHistory();
+      if(recovered)$('timeLogState').textContent+=` / Questログから${recovered}件復元`;
+    }catch(error){console.warn('QuestログからPC時刻履歴を復元できませんでした',error);}
   }
   savePresentationHistory();
   db.ref('.info/connected').on('value', snap => { $('pcConnection').textContent = snap.val() ? 'PC Firebase: 接続済み' : 'PC Firebase: 切断'; });
@@ -121,7 +135,7 @@
     if (v.status === 'ready' && !['calibrate','configure'].includes(awaiting.type)) return;
     if (messages[v.status]) { awaiting.received = true; tell(messages[v.status]); }
   }
-  auth.onAuthStateChanged(user => {
+  auth.onAuthStateChanged(async user => {
     const signedIn = user && !user.isAnonymous;
     $('login').style.display = signedIn ? 'none' : 'block'; $('control').style.display = signedIn ? 'block' : 'none';
     if (!signedIn) {
@@ -130,6 +144,7 @@
     }
     if (!$('preview').getAttribute('src')) $('preview').src = 'quest1.html?preview=1&v=20261027-requested1';
     if (!subscribed) { subscribed = true; root.child('status').on('value', receive, error => tell('Quest状態の購読エラー: ' + error.message)); }
+    await recoverPresentationHistory();
   });
   setInterval(() => {
     if (quest && !freshQuest()) $('state').textContent = 'Questの状態更新が途絶えています。接続・画面を確認してください';
