@@ -27,9 +27,14 @@
     sum+(index%2?1:-1)*Math.sin(2*Math.PI*frequency*t)/frequency**multi10AmplitudeExponent,0); }
   let multi10Peak=0;
   for(let i=0;i<=125000;i++)multi10Peak=Math.max(multi10Peak,Math.abs(multi10Raw(i/1000)));
+  const multi3Frequencies=Object.freeze([0.03,0.1,0.5]);
+  function multi3Raw(t) { return multi3Frequencies.reduce((sum,frequency)=>sum+Math.sin(2*Math.PI*frequency*t),0); }
+  let multi3Peak=0;
+  for(let i=0;i<=100000;i++)multi3Peak=Math.max(multi3Peak,Math.abs(multi3Raw(i/1000)));
   function angle(c,t,p) {
     if(c.mode==='sine')return c.amplitudeDeg*Math.sin(2*Math.PI*c.frequencyHz*t);
     if(c.mode==='multi10')return (c.amplitudePpDeg/2)*multi10Raw(t)/multi10Peak;
+    if(c.mode==='multi3')return (c.amplitudePpDeg/2)*multi3Raw(t)/multi3Peak;
     return c.mode==='csv'?interpolate(p,t):0;
   }
   function drawGrid(ctx, width, height) {
@@ -41,6 +46,6 @@
     for(let x=0;x<=32;x++) ctx.fillRect(x*dx-dx*.08,0,dx*.16,height);
     for(let y=0;y<=60;y++) ctx.fillRect(0,y*dy-dy*.08,width,dy*.16);
   }
-  const api={limits,parseCsv,interpolate,angle,drawGrid,multi10Frequencies,multi10Peak,multi10AmplitudeExponent}; scope.Stimulus=api;
+  const api={limits,parseCsv,interpolate,angle,drawGrid,multi10Frequencies,multi10Peak,multi10AmplitudeExponent,multi3Frequencies,multi3Peak}; scope.Stimulus=api;
   if(typeof module!=='undefined') module.exports=api;
 })(globalThis);

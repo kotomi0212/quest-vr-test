@@ -383,11 +383,11 @@
       resetKiemel();ack('pre-static',{runId:c.runId});return;
     }
     if(c.mode==='kiemel'||c.pattern==='kiemel-triangles'){block('Kiemelのプロトコル指令が必要です');return;}
-    if (!['baseline', 'sine', 'multi10', 'csv'].includes(c.mode) || !Number.isFinite(c.durationSec) || c.durationSec < 5 || c.durationSec > 600 ||
+    if (!['baseline', 'sine', 'multi3', 'multi10', 'csv'].includes(c.mode) || !Number.isFinite(c.durationSec) || c.durationSec < 5 || c.durationSec > 600 ||
       !/^[A-Za-z0-9_-]{1,100}$/.test(c.runId || '') ||
       (c.mode === 'sine' && (!Number.isFinite(c.frequencyHz) || c.frequencyHz <= 0 || c.frequencyHz > 2 ||
         !Number.isFinite(c.amplitudeDeg) || c.amplitudeDeg < 0 || c.amplitudeDeg > 4)) ||
-      (c.mode === 'multi10' && (!Number.isFinite(c.amplitudePpDeg) || c.amplitudePpDeg < .1 || c.amplitudePpDeg > 8)) ||
+      (['multi3','multi10'].includes(c.mode) && (!Number.isFinite(c.amplitudePpDeg) || c.amplitudePpDeg < .1 || c.amplitudePpDeg > 8)) ||
       !['ankle','hip','translation'].includes(c.rotationCenter)) {
       block('刺激設定が不正です'); return;
     }

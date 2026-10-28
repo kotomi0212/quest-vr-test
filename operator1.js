@@ -94,7 +94,9 @@
       const ctx=$('waveform').getContext('2d'); ctx.clearRect(0,0,640,160);ctx.beginPath();
       const duration=Number($('duration').value);
       for(let i=0;i<=640;i++){const a=Stimulus.angle(c,i/640*duration); const y=80-a*3; if(i)ctx.lineTo(i,y);else ctx.moveTo(i,y);}
-      ctx.strokeStyle='#165e91';ctx.stroke(); $('waveError').textContent=($('mode').value==='multi10'?'速度平滑10周波数: '+Stimulus.multi10Frequencies.map(f=>f.toFixed(3)).join(', ')+` Hz（振幅∝f^-${Stimulus.multi10AmplitudeExponent}）。`:'単一sin。')+'指定 '+pp+'° peak-to-peak。適用時は開始終了ランプ・速度制限あり';
+      ctx.strokeStyle='#165e91';ctx.stroke();
+      const description=$('mode').value==='multi10'?'速度平滑10周波数: '+Stimulus.multi10Frequencies.map(f=>f.toFixed(3)).join(', ')+` Hz（振幅∝f^-${Stimulus.multi10AmplitudeExponent}）。`:$('mode').value==='multi3'?'3周波数合成: 0.03, 0.1, 0.5 Hz（同振幅・同位相、合成波全体を指定振幅へ正規化）。':'単一sin。';
+      $('waveError').textContent=description+'指定 '+pp+'° peak-to-peak。適用時は開始終了ランプ・速度制限あり';
     } catch(e){$('waveError').textContent=e.message;}
   }
   $('control').addEventListener('input',drawWave); drawWave();
@@ -198,6 +200,7 @@
     const isK=$('mode').value==='kiemel';$('kiemelControls').hidden=!isK;$('legacyControls').hidden=isK;$('legacyBody').hidden=isK;$('estimateAnkle').hidden=isK;
     if(!isK)legacyMode=$('mode').value;
     if($('mode').value==='multi10' && Number($('duration').value)===60)$('duration').value=125;
+    if($('mode').value==='multi3' && [60,125].includes(Number($('duration').value)))$('duration').value=100;
     if(isK)$('pattern').value='kiemel-triangles';else if($('pattern').value==='kiemel-triangles')$('pattern').value='grid';
     updateModeLabel();describePattern();drawWave();return dispatch('configure');
   };

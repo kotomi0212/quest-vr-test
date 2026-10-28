@@ -7,6 +7,10 @@ assert.equal(S.trap,undefined);assert.equal(S.angle({mode:'sine',amplitudeDeg:5,
 const multiSamples=Array.from({length:125001},(_,i)=>S.angle({mode:'multi10',amplitudePpDeg:2},i/1000));
 assert.equal(S.multi10Frequencies.length,10);assert(Math.abs(multiSamples.reduce((a,b)=>Math.max(a,b),-Infinity)-1)<.01);assert(Math.abs(multiSamples.reduce((a,b)=>Math.min(a,b),Infinity)+1)<.01);
 assert.equal(S.multi10AmplitudeExponent,1.5);
+const multi3Samples=Array.from({length:100001},(_,i)=>S.angle({mode:'multi3',amplitudePpDeg:2},i/1000));
+assert.deepEqual(S.multi3Frequencies,[.03,.1,.5]);
+assert(Math.abs(multi3Samples.reduce((a,b)=>Math.max(a,b),-Infinity)-1)<.001);
+assert(Math.abs(multi3Samples.reduce((a,b)=>Math.min(a,b),Infinity)+1)<.001);
 const velocities=multiSamples.slice(1).map((value,i)=>(value-multiSamples[i])*1000);
 const accelerations=velocities.slice(1).map((value,i)=>(value-velocities[i])*1000);
 assert(velocities.reduce((maximum,value)=>Math.max(maximum,Math.abs(value)),0)<.3);
@@ -23,4 +27,4 @@ for(const file of ['quest.html','operator.html']) {
  const html=fs.readFileSync(path.join(__dirname,'..',file),'utf8');
  for(const match of html.matchAll(/src="([^"?]+)(?:\?[^\"]*)?"/g)) if(!/^https?:/.test(match[1])) assert(fs.existsSync(path.join(__dirname,'..',match[1])),match[1]);
 }
-console.log('PASS: sine, normalized 10-frequency stimulus, CSV interpolation/limits, pivot invariance, local script paths');
+console.log('PASS: sine, normalized 3- and 10-frequency stimuli, CSV interpolation/limits, pivot invariance, local script paths');

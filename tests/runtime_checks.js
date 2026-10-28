@@ -65,7 +65,7 @@ async function flush(){await Promise.resolve();await Promise.resolve();}
  assert(Math.abs(world.object3D.rotation.x)>.0001);assert(Math.abs(world.object3D.position.z)>.01);command('emergency');await flush();
  command('configure',{pattern:'grid-floor-only'});await flush();assert.equal(floorOnly.object3D.visible,true);assert.equal(floorOnly.object3D.position.y,1.5-1.6*1.7/2);
  command('configure',{pattern:'grid'});await flush();
- for(const mode of ['sine','multi10']) {
+ for(const mode of ['sine','multi3','multi10']) {
   command('start',{mode,frequencyHz:.2});await flush();
   now+=3001;tick();
   for(let i=0;i<150;i++){now+=10;tick();}
@@ -82,6 +82,10 @@ async function flush(){await Promise.resolve();await Promise.resolve();}
  command('start',{mode:'sine',frequencyHz:.2,rotationCenter:'translation'});await flush();now+=3001;tick();for(let i=0;i<100;i++){now+=10;tick();}
  assert.equal(world.object3D.rotation.x,0,'Translation must not rotate the room');
  assert(Math.abs(world.object3D.position.z+(1.5-.088)*(Math.PI/180)*Math.sin(2*Math.PI*.2*1)/1.5)<.001,'Translation must use eye-above-ankle times ankle-reference angle');
+ command('emergency');await flush();assert.equal(world.object3D.position.z,0);
+ command('start',{mode:'multi3',rotationCenter:'translation',durationSec:100});await flush();now+=3001;tick();for(let i=0;i<100;i++){now+=10;tick();}
+ assert.equal(world.object3D.rotation.x,0,'Multi3 translation must not rotate the room');
+ assert(Math.abs(world.object3D.position.z)>.001,'Multi3 translation must move the room fore/aft');
  command('emergency');await flush();assert.equal(world.object3D.position.z,0);
  command('start',{mode:'csv',csvFile:'test.csv',csvPoints:[[0,0],[2,4],[10,0]]});await flush();
  now+=3001;tick();for(let i=0;i<100;i++){now+=10;tick();}
