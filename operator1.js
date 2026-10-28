@@ -21,7 +21,7 @@
   populateKiemel();
   function updateModeLabel() {
     const isK=$('mode').value==='kiemel';$('kiemelControls').hidden=!isK;$('legacyControls').hidden=isK;$('legacyBody').hidden=isK;$('estimateAnkle').hidden=isK;
-    $('start').textContent=isK?'START（静止→刺激→静止）':'START（3秒後開始）';
+    $('start').textContent=isK?'START（静止→刺激→静止）':$('mode').value==='multi3'?'START（30秒静止後に開始）':'START（3秒後開始）';
   }
   const patternSelect=$('pattern');
   const visiblePatterns=new Set(['grid-room','noise-room','red-sphere-fore-aft','compact-grid-room','grid-floor-only']);
@@ -52,30 +52,29 @@
   let quest = null, lastSeq = 0, awaiting = null, subscribed = false, serverOffset = 0;
   let previewReady = false;
   const timeLogKey='quest1-presentation-history-v1';
-  let presentationHistory=[];
+  let presentationHistory=[],latestTrialCommand=null;
   try{presentationHistory=JSON.parse(localStorage.getItem(timeLogKey)||'[]');if(!Array.isArray(presentationHistory))presentationHistory=[];}catch(_){presentationHistory=[];}
+  presentationHistory=presentationHistory.slice(-1);
   const pcTime=(epochMs=Date.now())=>{const d=new Date(epochMs),p=n=>String(n).padStart(2,'0'),ms=String(d.getMilliseconds()).padStart(3,'0'),off=-d.getTimezoneOffset(),sign=off>=0?'+':'-';return `${d.getFullYear()}-${p(d.getMonth()+1)}-${p(d.getDate())} ${p(d.getHours())}:${p(d.getMinutes())}:${p(d.getSeconds())}.${ms} ${sign}${p(Math.floor(Math.abs(off)/60))}:${p(Math.abs(off)%60)}`;};
-  const savePresentationHistory=()=>{try{localStorage.setItem(timeLogKey,JSON.stringify(presentationHistory));}catch(_){}const last=presentationHistory.at(-1);$('timeLogState').textContent=last?`PC時刻履歴：${presentationHistory.length}件 / 最新 ${last.startPcTime} / ${last.patternLabel}${last.endPcTime?' ～ '+last.endPcTime:'（再生中）'}`:'PC時刻履歴：まだ記録がありません';};
+  const savePresentationHistory=()=>{presentationHistory=presentationHistory.slice(-1);try{localStorage.setItem(timeLogKey,JSON.stringify(presentationHistory));}catch(_){}const last=presentationHistory.at(-1);$('timeLogState').textContent=last?`直前の試行：静止開始 ${last.standbyStartPcTime||'-'} / 刺激開始 ${last.stimulusStartPcTime||'待機中'} / ${last.patternLabel}${last.stimulusEndPcTime?' ～ 終了 '+last.stimulusEndPcTime:'（記録中）'}`:'直前の試行：まだ記録がありません';};
   function recordPresentation(v){
     if(!v)return;
-    const activeStatuses=new Set(['loading','countdown','pre-static','running','post-static','returning']);
     const runId=v.runId||v.lastRunId;
-    let row=runId&&presentationHistory.find(item=>item.runId===runId);
-    if(v.runId&&activeStatuses.has(v.status)&&!row){row={runId:v.runId,pattern:v.pattern||'unknown',patternLabel:StimulusPatterns.get(v.pattern)?.label||v.pattern||'不明',mode:v.kiemelCondition||'',startPcTime:pcTime(),startPcEpochMs:Date.now(),endPcTime:'',endPcEpochMs:'',endReason:''};presentationHistory.push(row);savePresentationHistory();}
-    if(row&&!row.endPcTime&&['idle','blocked','log-error'].includes(v.status)){row.endPcTime=pcTime();row.endPcEpochMs=Date.now();row.endReason=v.reason||v.error||v.status;savePresentationHistory();}
+    let row=runId&&presentationHistory.find(item=>item.runId===runId),now=Date.now(),c=latestTrialCommand?.runId===runId?latestTrialCommand:{};
+    if(v.runId&&['loading','countdown','pre-static','running','post-static','returning'].includes(v.status)&&!row){row={runId:v.runId,pattern:c.pattern||v.pattern||'unknown',patternLabel:StimulusPatterns.get(c.pattern||v.pattern)?.label||c.pattern||v.pattern||'不明',mode:c.mode||v.kiemelCondition||'',frequenciesHz:c.mode==='multi3'?'0.03;0.1;0.5':c.frequencyHz||'',rotationCenter:c.rotationCenter||'',amplitudePpDeg:c.amplitudePpDeg??'',standbySec:c.mode==='multi3'?30:3,stimulusDurationSec:c.durationSec??'',standbyStartPcTime:pcTime(now),standbyStartPcEpochMs:now,stimulusStartPcTime:'',stimulusStartPcEpochMs:'',stimulusEndPcTime:'',stimulusEndPcEpochMs:'',endReason:''};presentationHistory=[row];savePresentationHistory();}
+    if(row&&v.status==='countdown'&&v.standbyStartedAtQuestWallClockMs){row.standbyStartQuestEpochMs=v.standbyStartedAtQuestWallClockMs;row.standbySec=Number(v.standbyDurationMs||row.standbySec*1000)/1000;savePresentationHistory();}
+    if(row&&v.status==='running'&&!row.stimulusStartPcTime){row.stimulusStartPcTime=pcTime(now);row.stimulusStartPcEpochMs=now;row.stimulusStartQuestEpochMs=v.startedAtQuestWallClockMs||'';savePresentationHistory();}
+    if(row&&!row.stimulusEndPcTime&&['idle','blocked','log-error'].includes(v.status)){row.stimulusEndPcTime=pcTime(now);row.stimulusEndPcEpochMs=now;row.endReason=v.reason||v.error||v.status;savePresentationHistory();}
   }
   async function recoverPresentationHistory(){
     try{
-      const logs=(await root.child('logs').get()).val()||{};let recovered=0;
+      const logs=(await root.child('logs').get()).val()||{},all=[];
       for(const userLogs of Object.values(logs))for(const [runId,log] of Object.entries(userLogs||{})){
-        const start=Number(log.startedAtQuestWallClockMs),end=Number(log.endedAtQuestWallClockMs);
+        const standby=Number(log.standbyStartedAtQuestWallClockMs),start=Number(log.startedAtQuestWallClockMs),end=Number(log.endedAtQuestWallClockMs);
         if(!Number.isFinite(start))continue;
-        let row=presentationHistory.find(item=>item.runId===runId);
-        if(!row){row={runId,pattern:log.pattern||'unknown',patternLabel:StimulusPatterns.get(log.pattern)?.label||log.pattern||'不明',mode:log.mode||'',startPcTime:pcTime(start),startPcEpochMs:start,endPcTime:Number.isFinite(end)?pcTime(end):'',endPcEpochMs:Number.isFinite(end)?end:'',endReason:log.reason||'recovered-from-quest-log'};presentationHistory.push(row);recovered++;}
-        else if(!row.endPcTime&&Number.isFinite(end)){row.endPcTime=pcTime(end);row.endPcEpochMs=end;row.endReason=log.reason||row.endReason;}
+        all.push({runId,pattern:log.pattern||'unknown',patternLabel:StimulusPatterns.get(log.pattern)?.label||log.pattern||'不明',mode:log.mode||'',frequenciesHz:log.mode==='multi3'?'0.03;0.1;0.5':log.frequencyHz||'',rotationCenter:log.rotationCenter||'',amplitudePpDeg:log.amplitudePpDeg??'',standbySec:Number(log.standbyDurationMs||3000)/1000,stimulusDurationSec:log.durationSec??'',standbyStartPcTime:pcTime(Number.isFinite(standby)?standby:start),standbyStartPcEpochMs:Number.isFinite(standby)?standby:start,standbyStartQuestEpochMs:Number.isFinite(standby)?standby:'',stimulusStartPcTime:pcTime(start),stimulusStartPcEpochMs:start,stimulusStartQuestEpochMs:start,stimulusEndPcTime:Number.isFinite(end)?pcTime(end):'',stimulusEndPcEpochMs:Number.isFinite(end)?end:'',stimulusEndQuestEpochMs:Number.isFinite(end)?end:'',endReason:log.reason||'recovered-from-quest-log'});
       }
-      presentationHistory.sort((a,b)=>Number(a.startPcEpochMs)-Number(b.startPcEpochMs));savePresentationHistory();
-      if(recovered)$('timeLogState').textContent+=` / Questログから${recovered}件復元`;
+      if(all.length){all.sort((a,b)=>a.standbyStartPcEpochMs-b.standbyStartPcEpochMs);presentationHistory=[all.at(-1)];savePresentationHistory();$('timeLogState').textContent+=' / Questログから復元';}
     }catch(error){console.warn('QuestログからPC時刻履歴を復元できませんでした',error);}
   }
   savePresentationHistory();
@@ -125,7 +124,7 @@
     if (!awaiting || v?.commandSeq !== awaiting.seq) return;
     if (awaiting.type === 'configure' && v.configured) { awaiting.received = true; tell('Questの映像を切り替えました（刺激は停止中）'); return; }
     const messages = {
-      loading: 'QuestがSTARTを受信：CSV読込中', countdown: 'QuestがSTARTを受信：3秒の待機中',
+      loading: 'QuestがSTARTを受信：CSV読込中', countdown: `QuestがSTARTを受信：${Number(v.standbyDurationMs||3000)/1000}秒の静止待機中`,
       running: 'Questで刺激を再生中', idle: 'Questで停止・終了しました',
       blocked: 'Questで開始・位置合わせができません：' + (v.error || '状態を確認してください'),
       'log-error': 'Questのログ保存に失敗しました：' + (v.error || ''),
@@ -183,6 +182,7 @@
         if(isKiemel)Object.assign(command,{protocol:'kiemel',mode:baselineRequest?'baseline':'kiemel',pattern:'kiemel-triangles',durationSec,kiemel:kcfg});
         else Object.assign(command, { heightCm, eyeHeightM, ankleHeightM, hipHeightM, rotationCenter, mode, frequencyHz, amplitudeDeg, amplitudePpDeg, durationSec, pattern:$('pattern').value, fixationVisible:$('fixationVisible').checked });
       }
+      if(type==='start')latestTrialCommand={...command};
       attempt = { seq, type, received: false }; awaiting = attempt;
       // set() queues writes offline. A reconnect may deliver this later; Quest rejects stale START/calibrate.
       await root.child('command').set(command);
@@ -215,7 +215,7 @@
   $('applyPattern').onclick = () => dispatch('configure');
   $('fixationVisible').onchange = () => dispatch('configure');
   $('ampPreset').onchange = () => {$('amp').value=$('ampPreset').value;drawWave();};
-  $('timeLogDownload').onclick=()=>{const rows=[['start_pc_time','end_pc_time','pattern','pattern_label','mode','run_id','start_pc_epoch_ms','end_pc_epoch_ms','end_reason'],...presentationHistory.map(x=>[x.startPcTime,x.endPcTime,x.pattern,x.patternLabel,x.mode,x.runId,x.startPcEpochMs,x.endPcEpochMs,x.endReason])],text=rows.map(r=>r.map(v=>'"'+String(v??'').replaceAll('"','""')+'"').join(',')).join('\r\n'),a=document.createElement('a');a.href=URL.createObjectURL(new Blob(['\uFEFF'+text],{type:'text/csv'}));a.download='quest1-pc-time-history.csv';a.click();setTimeout(()=>URL.revokeObjectURL(a.href),1000);};
+  $('timeLogDownload').onclick=()=>{const rows=[['standby_start_pc_time','stimulus_start_pc_time','stimulus_end_pc_time','pattern','pattern_label','mode','frequencies_hz','rotation_center','amplitude_pp_deg','standby_sec','stimulus_duration_sec','run_id','standby_start_pc_epoch_ms','stimulus_start_pc_epoch_ms','stimulus_end_pc_epoch_ms','end_reason'],...presentationHistory.slice(-1).map(x=>[x.standbyStartPcTime,x.stimulusStartPcTime,x.stimulusEndPcTime,x.pattern,x.patternLabel,x.mode,x.frequenciesHz,x.rotationCenter,x.amplitudePpDeg,x.standbySec,x.stimulusDurationSec,x.runId,x.standbyStartPcEpochMs,x.stimulusStartPcEpochMs,x.stimulusEndPcEpochMs,x.endReason])],text=rows.map(r=>r.map(v=>'"'+String(v??'').replaceAll('"','""')+'"').join(',')).join('\r\n'),a=document.createElement('a');a.href=URL.createObjectURL(new Blob(['\uFEFF'+text],{type:'text/csv'}));a.download='quest1-latest-presentation.csv';a.click();setTimeout(()=>URL.revokeObjectURL(a.href),1000);};
   $('csvDownload').onclick = async () => { try {
     const logs=(await root.child('logs').get()).val()||{},entries=[];
     for(const user of Object.values(logs))for(const [id,log] of Object.entries(user))entries.push({id,log,columns:log.sampleColumns||((log.samples?.[0]?.length||0)<=2?['elapsed_ms','applied_deg']:['elapsed_ms','applied_deg','commanded_deg','performance_ms','epoch_estimate_ms'])});

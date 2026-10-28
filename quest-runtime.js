@@ -248,7 +248,8 @@
     ack('idle', { lastRunId: trial.cmd.runId, reason });
     if (preview || !root || !user) return;
     const c = trial.cmd;
-    const payload = { ...c, reason, startedAtQuestWallClockMs: trial.startedWallMs,
+    const payload = { ...c, reason, standbyStartedAtQuestWallClockMs: trial.preludeWallMs,
+      standbyDurationMs: trial.preludeMs, startedAtQuestWallClockMs: trial.startedWallMs,
       endedAtQuestWallClockMs: Date.now(), anklePivotM: trial.pivot, calibration: trial.calibration, patternSettings: trial.patternSettings, layoutSettings:trial.layoutSettings, motionSettings:trial.motionSettings, timeOriginMs: performance.timeOrigin, serverOffsetMs: serverOffset, sampleColumns: ['elapsed_ms','applied_deg','commanded_deg','performance_ms','epoch_estimate_ms','translation_z_m'],
       samples: trial.samples,
       note: 'Software transforms, not measured photon output. Quest wall-clock timestamps are not synchronized with external sensors.' };
@@ -374,7 +375,7 @@
     selectPattern(c.pattern || 'room');
     const token = generation;
     const trial = { cmd: { ...c, pattern:selectedPattern }, patternSettings:patternSettings(), layoutSettings:layoutSettings(), motionSettings:motionSettings(), samples: [], pivot: pivot.toArray(), points: null, calibration,
-      startedPerf: null, startedWallMs: null, preludePerf: null };
+      startedPerf: null, startedWallMs: null, preludePerf: null, preludeWallMs: null, preludeMs: c.mode === 'multi3' ? 30000 : 3000 };
     if (preview) {
       scene.querySelector('a-camera').setAttribute('position', { x: 0, y: c.eyeHeightM || 1.5, z: 0 });
       pivot.set(0, c.ankleHeightM || 0, 0); trial.pivot = pivot.toArray();
@@ -395,8 +396,8 @@
     }
     }
     if (token !== generation || !ready() || (!preview && !connected)) return;
-    pending = null; trial.preludePerf = performance.now(); active = trial; rotate(0);
-    show('開始待機（3秒）: ' + c.mode); ack('countdown', { commandSeq: c.seq, runId: c.runId });
+    pending = null; trial.preludePerf = performance.now(); trial.preludeWallMs = Date.now(); active = trial; rotate(0);
+    show(`開始待機（${trial.preludeMs / 1000}秒・静止表示）: ${c.mode}`); ack('countdown', { commandSeq: c.seq, runId: c.runId, standbyStartedAtQuestWallClockMs: trial.preludeWallMs, standbyDurationMs: trial.preludeMs });
   }
   AFRAME.registerComponent('stimulus-driver', {
     tick() {
@@ -406,7 +407,7 @@
       const now = performance.now();
       if(active.kiemel){tickKiemel(now);return;}
       if (active.startedPerf === null) {
-        if (now - active.preludePerf < 3000) return;
+        if (now - active.preludePerf < active.preludeMs) return;
         active.startedPerf = now; active.startedWallMs = Date.now();
         show('再生中: ' + active.cmd.mode); ack('running', { commandSeq: active.cmd.seq, runId: active.cmd.runId, startedAtQuestWallClockMs: active.startedWallMs });
       }

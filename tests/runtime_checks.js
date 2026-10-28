@@ -67,7 +67,7 @@ async function flush(){await Promise.resolve();await Promise.resolve();}
  command('configure',{pattern:'grid'});await flush();
  for(const mode of ['sine','multi3','multi10']) {
   command('start',{mode,frequencyHz:.2});await flush();
-  now+=3001;tick();
+  now+=(mode==='multi3'?30001:3001);tick();
   for(let i=0;i<150;i++){now+=10;tick();}
   assert(Math.abs(world.object3D.rotation.x)>.0001,mode+' must move in production tick');
   command('return');await flush();
@@ -83,7 +83,7 @@ async function flush(){await Promise.resolve();await Promise.resolve();}
  assert.equal(world.object3D.rotation.x,0,'Translation must not rotate the room');
  assert(Math.abs(world.object3D.position.z+(1.5-.088)*(Math.PI/180)*Math.sin(2*Math.PI*.2*1)/1.5)<.001,'Translation must use eye-above-ankle times ankle-reference angle');
  command('emergency');await flush();assert.equal(world.object3D.position.z,0);
- command('start',{mode:'multi3',rotationCenter:'translation',durationSec:100});await flush();now+=3001;tick();for(let i=0;i<100;i++){now+=10;tick();}
+ command('start',{mode:'multi3',rotationCenter:'translation',durationSec:100});await flush();now+=29999;tick();assert.equal(world.object3D.position.z,0,'Multi3 must remain static for 30 seconds');now+=2;tick();for(let i=0;i<100;i++){now+=10;tick();}
  assert.equal(world.object3D.rotation.x,0,'Multi3 translation must not rotate the room');
  assert(Math.abs(world.object3D.position.z)>.001,'Multi3 translation must move the room fore/aft');
  command('emergency');await flush();assert.equal(world.object3D.position.z,0);

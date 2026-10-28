@@ -21,7 +21,7 @@
   populateKiemel();
   function updateModeLabel() {
     const isK=$('mode').value==='kiemel';$('kiemelControls').hidden=!isK;$('legacyControls').hidden=isK;$('legacyBody').hidden=isK;$('estimateAnkle').hidden=isK;
-    $('start').textContent=isK?'START（静止→刺激→静止）':'START（3秒後開始）';
+    $('start').textContent=isK?'START（静止→刺激→静止）':$('mode').value==='multi3'?'START（30秒静止後に開始）':'START（3秒後開始）';
   }
   const patternSelect=$('pattern');
   const visiblePatterns=new Set(['grid-room','noise-room']);

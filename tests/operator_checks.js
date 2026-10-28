@@ -20,11 +20,11 @@ listeners['sessions/test/status']({val:()=>({instanceId:'quest',at:Date.now(),fi
 (async()=>{
  listeners['sessions/test/status']({val:()=>({status:'running',runId:'time-test',pattern:'compact-grid-room',instanceId:'quest',at:Date.now(),firebaseState:'接続済み',immersive:true,renderStarted:true,calibrated:true})});
  listeners['sessions/test/status']({val:()=>({status:'idle',lastRunId:'time-test',pattern:'compact-grid-room',reason:'completed',instanceId:'quest',at:Date.now(),firebaseState:'接続済み',immersive:true,renderStarted:true,calibrated:true})});
- const timeRows=JSON.parse(localValues['quest1-presentation-history-v1']);assert.equal(timeRows.length,1);assert.equal(timeRows[0].pattern,'compact-grid-room');assert(timeRows[0].startPcTime&&timeRows[0].endPcTime);
+ const timeRows=JSON.parse(localValues['quest1-presentation-history-v1']);assert.equal(timeRows.length,1);assert.equal(timeRows[0].pattern,'compact-grid-room');assert(timeRows[0].standbyStartPcTime&&timeRows[0].stimulusStartPcTime&&timeRows[0].stimulusEndPcTime);
  nodes.pattern.value='grid';await nodes.start.onclick();assert.equal(writes.at(-1).mode,'sine');assert.equal(writes.at(-1).pattern,'grid');
  nodes.mode.value='sine';await nodes.start.onclick();assert.equal(writes.at(-1).mode,'sine');
  nodes.mode.value='multi10';await nodes.mode.onchange();await nodes.start.onclick();assert.equal(writes.at(-1).mode,'multi10');assert.equal(writes.at(-1).amplitudePpDeg,2);
- nodes.mode.value='multi3';nodes.duration.value='60';await nodes.mode.onchange();await nodes.start.onclick();assert.equal(writes.at(-1).mode,'multi3');assert.equal(writes.at(-1).durationSec,100);assert.equal(writes.at(-1).amplitudePpDeg,2);
+ nodes.mode.value='multi3';nodes.duration.value='60';await nodes.mode.onchange();assert.match(nodes.start.textContent,/30秒/);await nodes.start.onclick();assert.equal(writes.at(-1).mode,'multi3');assert.equal(writes.at(-1).durationSec,100);assert.equal(writes.at(-1).amplitudePpDeg,2);
  nodes.rotationCenter.value='hip';await nodes.start.onclick();assert.equal(writes.at(-1).rotationCenter,'hip');assert.equal(writes.at(-1).hipHeightM,.9);
  nodes.rotationCenter.value='translation';await nodes.start.onclick();assert.equal(writes.at(-1).rotationCenter,'translation');
  nodes.mode.value='sine';nodes.rotationCenter.value='ankle';
