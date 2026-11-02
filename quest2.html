@@ -5,7 +5,7 @@
 <script>window.vrLastError='';function reportStartupError(t){window.vrLastError=String(t);const n=document.getElementById('diagnostics');if(n)n.textContent=window.vrLastError;}window.addEventListener('error',e=>reportStartupError(e.message));window.addEventListener('unhandledrejection',e=>reportStartupError(e.reason?.message||e.reason));</script>
 <script defer src="https://aframe.io/releases/1.7.0/aframe.min.js" onerror="reportStartupError('A-Frame読込失敗')"></script>
 </head><body>
-<div id="info"><b>Mani 2022 · 白球の放射状フロー</b><p id="status">準備中…</p><small id="diagnostics"></small><small>右下のVRボタンで開始 → PCで正面位置合わせ → START。直径10 cm・速度5 cm/s・1,000球/秒・50秒。</small><p><button id="download">端末ログ保存</button></p></div>
+<div id="info"><b>Mani 2022 · 白球の放射状フロー</b><p id="status">準備中…</p><small id="diagnostics"></small><small>右下のVRボタンで開始 → PCで正面位置合わせ → START。直径10 cm・速度5 cm/s・固定数循環・50秒。</small><p><button id="download">端末ログ保存</button></p></div>
 <template id="scene-template"><a-scene mani-driver background="color: #000" renderer="antialias: true; colorManagement: true" webxr="referenceSpaceType: local-floor" xr-mode-ui="enabled: true"><a-entity id="cloud"></a-entity><a-camera position="0 1.6 0" wasd-controls="enabled: false" near="0.05" far="150"></a-camera></a-scene></template>
-<script defer src="mani-stimulus.js"></script><script defer src="mani-runtime.js"></script>
+<script defer src="mani-stimulus.js?v=steady-flow-v2"></script><script defer src="mani-runtime.js?v=steady-flow-v2"></script>
 </body></html>

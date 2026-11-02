@@ -84,11 +84,11 @@ class ManiBrowserChecks(unittest.TestCase):
         self.advance(2999); self.assertEqual(self.status()['status'], 'countdown')
         self.advance(1); self.assertEqual(self.status()['status'], 'running')
         self.advance(10000)
-        self.assertEqual(self.page.evaluate("document.querySelector('#cloud').getObject3D('mesh').count"),10000)
+        self.assertEqual(self.page.evaluate("document.querySelector('#cloud').getObject3D('mesh').count"),1000)
         self.advance(40000); self.assertEqual(self.status()['reason'], 'completed')
         log=self.page.evaluate("fixture.writes.find(w=>w.path.includes('/logs/')).value")
-        self.assertEqual(log['scheduledSphereCount'],50000)
-        self.assertEqual(log['lastSubmittedSphereCount'],10000)
+        self.assertEqual(log['paperReferenceSphereTotal'],50000)
+        self.assertEqual(log['lastSubmittedSphereCount'],1000)
         self.assertEqual(log['analysisWindowSec'],[10,40]); self.assertEqual(log['nominalXRHz'],90)
         self.assertEqual(len(log['samples'][0]),10)
         self.send(type='start',settings={'countdownSec':0});self.advance(1)
@@ -135,12 +135,30 @@ class ManiBrowserChecks(unittest.TestCase):
         self.assertFalse(self.status()['calibrated'])
         self.assertFalse(self.errors,self.errors)
 
-    def test_full_paper_load_and_duplicate_command(self):
+    def test_rendered_recycling_and_no_population_growth(self):
+        from PIL import Image, ImageChops
+        import io
+        self.quest()
+        self.send(type='start',settings={'condition':'full','countdownSec':0,'speedMps':5})
+        self.advance(1)
+        def capture():
+            self.page.evaluate("document.querySelector('a-scene').renderer.render(document.querySelector('a-scene').object3D,document.querySelector('a-scene').camera)")
+            self.assertEqual(self.page.evaluate("document.querySelector('#cloud').getObject3D('mesh').count"),1000)
+            return Image.open(io.BytesIO(self.page.locator('canvas').screenshot())).convert('RGB')
+        initial=capture()
+        self.advance(1950);moving=capture()
+        self.advance(1950);recycled=capture() # (20m - 0.5m) / 5m/s = 3.9 seconds
+        changes=lambda a,b:sum(1 for px in ImageChops.difference(a,b).getdata() if max(px)>20)
+        self.assertGreater(changes(initial,moving),100)
+        self.assertLess(changes(initial,recycled),initial.width*initial.height*.01)
+        self.assertFalse(self.errors,self.errors)
+
+    def test_fixed_population_at_trial_end_and_duplicate_command(self):
         self.quest()
         self.send(type='start',settings={'condition':'full','countdownSec':0});self.advance(1)
         self.advance(49999)
         self.page.evaluate("document.querySelector('a-scene').renderer.render(document.querySelector('a-scene').object3D,document.querySelector('a-scene').camera)")
-        self.assertEqual(self.page.evaluate("document.querySelector('#cloud').getObject3D('mesh').count"),49999)
+        self.assertEqual(self.page.evaluate("document.querySelector('#cloud').getObject3D('mesh').count"),1000)
         self.send(type='calibrate',seq=1)
         self.advance(1)
         self.assertEqual(self.status()['reason'],'completed')

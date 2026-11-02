@@ -14,7 +14,7 @@
   const rendered=()=>!!(scene.renderStarted&&scene.camera&&!lost);
   const ready=()=>rendered()&&(preview||immersive());
   function diagnostics(){return {instanceId,protocol:'mani-2022',renderStarted:rendered(),immersive:immersive(),
-    calibrated:!!calibration,calibration,firebaseState,settings,fidelity:ManiStimulus.fidelity,
+    calibrated:!!calibration,calibration,firebaseState,settings,stimulusVersion:ManiStimulus.version,fidelity:ManiStimulus.fidelity,
     elapsedSec:active?.started!==null&&active?(performance.now()-active.started)/1000:0,
     renderedFrames:active?.samples.length||0,startupError:window.vrLastError||''};}
   function ack(state,extra={}) {
@@ -27,19 +27,18 @@
     settings=c;points=ManiStimulus.generate(c);
     if(cloud){scene.querySelector('#cloud').removeObject3D('mesh');cloud.geometry.dispose();cloud.material.dispose();}
     // Clip fragments in each XR eye's view space; no sphere can leak over the horizontal boundary.
-    const material=new T.ShaderMaterial({uniforms:{field:{value:{full:0,upper:1,lower:2,none:3}[c.condition]},elapsed:{value:0},speed:{value:c.speedMps},nearDepth:{value:c.nearM}},
-      vertexShader:'attribute float birth; uniform float elapsed; uniform float speed; varying float viewY; varying float cloudDepth; void main(){vec4 local=instanceMatrix*vec4(position,1.0);local.z+=speed*max(0.0,elapsed-birth);cloudDepth=-local.z;vec4 p=modelViewMatrix*local;viewY=p.y;gl_Position=projectionMatrix*p;}',
+    const material=new T.ShaderMaterial({uniforms:{field:{value:{full:0,upper:1,lower:2,none:3}[c.condition]},elapsed:{value:0},speed:{value:c.speedMps},nearDepth:{value:c.nearM},depthSpan:{value:c.farM-c.nearM}},
+      vertexShader:'uniform float elapsed; uniform float speed; uniform float nearDepth; uniform float depthSpan; varying float viewY; varying float cloudDepth; void main(){vec4 center=instanceMatrix*vec4(0.0,0.0,0.0,1.0);center.z=-(nearDepth+mod(-center.z-nearDepth-speed*elapsed,depthSpan));vec4 local=center+vec4(position,0.0);cloudDepth=-local.z;vec4 p=modelViewMatrix*local;viewY=p.y;gl_Position=projectionMatrix*p;}',
       fragmentShader:'uniform int field; uniform float nearDepth; varying float viewY; varying float cloudDepth; void main(){if(cloudDepth<nearDepth||field==3||(field==1&&viewY<=0.0)||(field==2&&viewY>=0.0))discard;gl_FragColor=vec4(1.0);}',
       toneMapped:false});
     const geometry=new T.SphereGeometry(c.radiusM,8,6);
-    geometry.setAttribute('birth',new T.InstancedBufferAttribute(new Float32Array(points.map(p=>p[3])),1));
     cloud=new T.InstancedMesh(geometry,material,points.length);cloud.frustumCulled=false;
     for(let i=0;i<points.length;i++){const p=points[i];matrix.makeTranslation(p[0],p[1],-p[2]);cloud.setMatrixAt(i,matrix);}
     cloud.instanceMatrix.needsUpdate=true;
     scene.querySelector('#cloud').setObject3D('mesh',cloud);updateCloud(0);cloud.visible=false;
   }
   function updateCloud(t) {
-    cloud.count=Math.min(points.length,Math.ceil(t*settings.emissionRate));
+    cloud.count=points.length;
     cloud.material.uniforms.elapsed.value=t;
   }
   function finish(reason='completed') {
@@ -47,8 +46,9 @@
     if(!trial)return;
     const log={protocol:'mani-2022',doi:ManiStimulus.doi,fidelity:ManiStimulus.fidelity,
       command:trial.command,settings:trial.settings,calibration:trial.calibration,reason,
-      fixation:ManiStimulus.fixation,assumptions:ManiStimulus.assumptions,analysisWindowSec:[10,40],
-      scheduledSphereCount:trial.settings.condition==='none'?0:points.length,
+      fixation:ManiStimulus.fixation,assumptions:ManiStimulus.assumptions,analysisWindowSec:[10,40],stimulusVersion:ManiStimulus.version,
+      paperReferenceSphereTotal:trial.settings.durationSec*trial.settings.emissionRate,
+      particlePoolSize:trial.settings.condition==='none'?0:points.length,
       lastSubmittedSphereCount:trial.settings.condition==='none'?0:cloud.count,
       countdownStartedWallMs:trial.countdownWall,startedWallMs:trial.startedWall,endedWallMs:Date.now(),
       serverOffsetMs:offset,timeOriginMs:performance.timeOrigin,

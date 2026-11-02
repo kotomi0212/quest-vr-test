@@ -25,7 +25,7 @@
   $('signIn').onclick=async()=>{try{await auth.signInWithEmailAndPassword($('email').value,$('password').value);}catch(e){$('authState').textContent=e.message;}};
   auth.onAuthStateChanged(user=>{
     const signed=!!user&&!user.isAnonymous;$('login').hidden=signed;$('control').hidden=!signed;
-    if(signed&&!subscribed){subscribed=true;root.child('status').on('value',receive,e=>tell('購読エラー: '+e.message));$('preview').src='quest2.html?preview=1';}
+    if(signed&&!subscribed){subscribed=true;root.child('status').on('value',receive,e=>tell('購読エラー: '+e.message));$('preview').src='quest2.html?preview=1&v=steady-flow-v2';}
     else if(!signed){if(subscribed)root.child('status').off('value',receive);subscribed=false;quest=null;previewReady=false;$('preview').removeAttribute('src');}
   });
   window.addEventListener('message',e=>{if(e.origin===location.origin&&e.source===$('preview').contentWindow&&e.data?.type==='mani-preview-ready')previewReady=true;});
