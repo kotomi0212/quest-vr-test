@@ -52,7 +52,7 @@ class ManiBrowserChecks(unittest.TestCase):
         else: route.abort()
 
     def quest(self):
-        self.page.goto(self.base+'/mani-quest.html')
+        self.page.goto(self.base+'/quest2.html')
         self.page.wait_for_function("window.fixture?.lastStatus()?.renderStarted")
         self.path = self.page.evaluate("[...fixture.listeners.keys()].find(k=>k.endsWith('/command'))")
         self.page.evaluate("""() => {
@@ -147,7 +147,7 @@ class ManiBrowserChecks(unittest.TestCase):
         self.assertFalse(self.errors,self.errors)
 
     def test_operator_command_and_preview_isolation(self):
-        self.page.goto(self.base+'/mani-operator.html')
+        self.page.goto(self.base+'/operator2.html')
         self.page.wait_for_function("window.fixture && !document.getElementById('control').hidden")
         self.page.wait_for_function("document.querySelector('iframe').contentWindow.document.querySelector('a-scene')?.renderStarted")
         self.page.evaluate("""() => fixture.emit([...fixture.listeners.keys()].find(k=>k.endsWith('/status')),

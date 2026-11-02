@@ -3,7 +3,8 @@
   const $=id=>document.getElementById(id),tell=t=>{$('feedback').textContent=t;};
   const config=window.VR_REMOTE_CONFIG;
   if(!window.firebase||!config){$('authState').textContent='Firebaseの読込失敗。再読込してください';return;}
-  const app=firebase.initializeApp(config.firebase,'mani-operator'),auth=app.auth(),db=app.database();
+  // Reuse the same persisted experimenter sign-in as the original operator page.
+  const app=firebase.initializeApp(config.firebase),auth=app.auth(),db=app.database();
   const root=db.ref('sessions/'+config.sessionId+'-mani');
   let quest=null,connected=false,offset=0,seq=0,previewSeq=0,previewReady=false,subscribed=false,awaiting=null;
   const settings=()=>ManiStimulus.validate(Object.fromEntries(Object.keys(ManiStimulus.defaults).map(key=>[key,key==='condition'?$(key).value:Number($(key).value)])));
@@ -24,7 +25,7 @@
   $('signIn').onclick=async()=>{try{await auth.signInWithEmailAndPassword($('email').value,$('password').value);}catch(e){$('authState').textContent=e.message;}};
   auth.onAuthStateChanged(user=>{
     const signed=!!user&&!user.isAnonymous;$('login').hidden=signed;$('control').hidden=!signed;
-    if(signed&&!subscribed){subscribed=true;root.child('status').on('value',receive,e=>tell('購読エラー: '+e.message));$('preview').src='mani-quest.html?preview=1';}
+    if(signed&&!subscribed){subscribed=true;root.child('status').on('value',receive,e=>tell('購読エラー: '+e.message));$('preview').src='quest2.html?preview=1';}
     else if(!signed){if(subscribed)root.child('status').off('value',receive);subscribed=false;quest=null;previewReady=false;$('preview').removeAttribute('src');}
   });
   window.addEventListener('message',e=>{if(e.origin===location.origin&&e.source===$('preview').contentWindow&&e.data?.type==='mani-preview-ready')previewReady=true;});

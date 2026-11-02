@@ -6,15 +6,15 @@
 
 ## 起動と操作
 
-- Quest：`mani-quest.html` をQuest BrowserでHTTPSから開き、標準VRボタンを押す。
-- PC：同じホストの `mani-operator.html` を開き、既存Firebaseの実験者アカウントでログインする。
+- Quest：`quest2.html` をQuest BrowserでHTTPSから開き、標準VRボタンを押す。
+- PC：同じホストの `operator2.html` を開き、既存Firebaseの実験者アカウントでログインする。
 - Questで実験位置に直立し、正面を向いた状態でPCの「正面位置合わせ」を押す。
 - 条件を選びSTART。初期設定は3秒待機の後に50秒提示。STOPは即時停止し、赤い注視点だけを残す。
 - 提示終了後もVRを維持する。再接続・VR再入場・画面非表示後は再度位置合わせする。
 - PCプレビューのボタンはQuestを操作しない。Questの実際の視線や提示時刻も表さない。
 - 設定を変更した場合は次のSTARTで適用される。実行中のSTARTや位置合わせは拒否する。
 
-GitHub Pagesはmainを公開しているため、feature/Maniのpushだけでは本番URLに新しいページは出現しない。ブランチをHTTPSの検証環境で配信するか、レビュー後にmainへ統合する必要がある。ローカルPCの確認には `python -m http.server 8000 --bind 127.0.0.1` と http://127.0.0.1:8000/mani-operator.html を使用できる。QuestからPCのHTTPアドレスを開くだけではWebXRのHTTPS要件を満たさない。
+公開URLはPC操作 https://kotomi0212.github.io/quest-vr-test/operator2.html とQuest表示 https://kotomi0212.github.io/quest-vr-test/quest2.html 。mainへの統合後にGitHub Pagesへ反映される。ローカルPCの確認には `python -m http.server 8000 --bind 127.0.0.1` と http://127.0.0.1:8000/operator2.html を使用できる。QuestからPCのHTTPアドレスを開くだけではWebXRのHTTPS要件を満たさない。
 
 ## 本文から反映した条件
 
