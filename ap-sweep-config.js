@@ -8,6 +8,7 @@
     durationSec: 300,
     velocityAmplitudeMps: 0.1,
     roomSizeM: 6,
+    roomHeightM: 2.5,
     gridSpacingM: 0.5,
     integrationStepSec: 0.001,
     countdownSec: 3,

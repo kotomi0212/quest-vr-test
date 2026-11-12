@@ -5,14 +5,15 @@
   function validate(input) {
     const c = { ...input };
     const finite = ['startFrequencyHz', 'endFrequencyHz', 'durationSec', 'velocityAmplitudeMps',
-      'roomSizeM', 'gridSpacingM', 'integrationStepSec'];
+      'roomSizeM', 'roomHeightM', 'gridSpacingM', 'integrationStepSec'];
     if (!finite.every(key => Number.isFinite(c[key]))) throw Error('刺激設定に数値以外が含まれています');
     if (c.startFrequencyHz <= c.endFrequencyHz || c.endFrequencyHz < 0.01 || c.startFrequencyHz > 5) {
       throw Error('周波数は5 Hz以下、0.01 Hz以上で、高周波から低周波へ設定してください');
     }
     if (c.durationSec < 5 || c.durationSec > 1800) throw Error('刺激時間は5～1800秒で設定してください');
     if (c.velocityAmplitudeMps <= 0 || c.velocityAmplitudeMps > 1) throw Error('速度振幅は0より大きく1 m/s以下で設定してください');
-    if (c.roomSizeM < 2 || c.roomSizeM > 20) throw Error('部屋サイズは2～20 mで設定してください');
+    if (c.roomSizeM < 2 || c.roomSizeM > 20) throw Error('床面サイズは2～20 mで設定してください');
+    if (c.roomHeightM < 2 || c.roomHeightM > 5) throw Error('壁の高さは2～5 mで設定してください');
     if (c.gridSpacingM < 0.1 || c.gridSpacingM > c.roomSizeM / 2) throw Error('格子間隔は0.1 m以上、部屋サイズの半分以下にしてください');
     if (c.integrationStepSec < 0.0005 || c.integrationStepSec > 0.01) throw Error('積分刻みは0.5～10 msで設定してください');
     return c;

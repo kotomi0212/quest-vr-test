@@ -8,8 +8,8 @@
   <script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-auth-compat.js"></script>
   <script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-database-compat.js"></script>
   <script src="firebase-config.js"></script>
-  <script src="ap-sweep-config.js?v=2"></script>
-  <script src="ap-sweep-stimulus.js?v=2"></script>
+  <script src="ap-sweep-config.js?v=3"></script>
+  <script src="ap-sweep-stimulus.js?v=3"></script>
   <style>
     body{font:16px system-ui;max-width:760px;margin:28px auto;padding:0 18px;background:#f3f5f6;color:#17232c}
     section{background:#fff;border:1px solid #d5dde1;border-radius:12px;padding:18px;margin:14px 0}
@@ -39,7 +39,8 @@
       <div><label for="endFrequency">終了周波数 (Hz)</label><input id="endFrequency" type="number" min="0.01" max="5" step="0.01"></div>
       <div><label for="duration">刺激／Baseline時間 (秒)</label><input id="duration" type="number" min="5" max="1800" step="1"></div>
       <div><label for="velocityAmplitude">速度振幅 (m/s)</label><input id="velocityAmplitude" type="number" min="0.001" max="1" step="0.001"></div>
-      <div><label for="roomSize">立方体の一辺 (m)</label><input id="roomSize" type="number" min="2" max="20" step="0.1"></div>
+      <div><label for="roomSize">床面の幅・奥行き (m)</label><input id="roomSize" type="number" min="2" max="20" step="0.1"></div>
+      <div><label for="roomHeight">壁の高さ (m)</label><input id="roomHeight" type="number" min="2" max="5" step="0.1"></div>
       <div><label for="gridSpacing">格子間隔 (m)</label><input id="gridSpacing" type="number" min="0.1" step="0.1"></div>
     </div>
     <p id="summary" class="muted"></p>
@@ -49,6 +50,6 @@
     <p><button id="csvDownload">ログCSV出力</button> <button id="jsonDownload">ログJSON出力</button></p>
     <p id="message" role="status" aria-live="polite">QuestでVRを開始し、立ち位置を合わせてください。</p>
   </section>
-  <script src="ap-sweep-operator.js?v=2"></script>
+  <script src="ap-sweep-operator.js?v=3"></script>
 </body>
 </html>

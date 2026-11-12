@@ -46,6 +46,7 @@ for (const bad of [
   { durationSec: 2 },
   { velocityAmplitudeMps: 0 },
   { roomSizeM: 1 },
+  { roomHeightM: 1.9 },
   { gridSpacingM: 4 }
 ]) assert.throws(() => sweep.validate({ ...config, ...bad }));
 

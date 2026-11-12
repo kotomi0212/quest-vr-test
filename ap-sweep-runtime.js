@@ -32,6 +32,7 @@
       durationSec: Number(command.durationSec),
       velocityAmplitudeMps: Number(command.velocityAmplitudeMps),
       roomSizeM: Number(command.roomSizeM),
+      roomHeightM: Number(command.roomHeightM),
       gridSpacingM: Number(command.gridSpacingM),
       integrationStepSec: defaults.integrationStepSec,
       countdownSec: defaults.countdownSec,
@@ -42,20 +43,29 @@
 
   function configureRoom(config = settings) {
     const size = config.roomSizeM;
+    const height = config.roomHeightM;
     const half = size / 2;
-    const repeat = size / config.gridSpacingM;
-    for (const plane of room.querySelectorAll('a-plane')) {
-      plane.setAttribute('width', size);
-      plane.setAttribute('height', size);
-      plane.setAttribute('material', `src: url(grid.svg); shader: flat; side: double; repeat: ${repeat} ${repeat}`);
+    const floorRepeat = size / config.gridSpacingM;
+    const wallRepeat = height / config.gridSpacingM;
+    const surface = (selector, width, surfaceHeight, repeatX, repeatY) => {
+      const plane = $(selector);
+      plane.setAttribute('width', width);
+      plane.setAttribute('height', surfaceHeight);
+      plane.setAttribute('material', `src: url(grid.svg); shader: flat; side: double; repeat: ${repeatX} ${repeatY}`);
+    };
+    surface('.room-floor', size, size, floorRepeat, floorRepeat);
+    surface('.room-ceiling', size, size, floorRepeat, floorRepeat);
+    for (const selector of ['.room-front', '.room-back', '.room-left', '.room-right']) {
+      surface(selector, size, height, floorRepeat, wallRepeat);
     }
     $('.room-floor').setAttribute('position', '0 0 0');
-    $('.room-ceiling').setAttribute('position', `0 ${size} 0`);
-    $('.room-front').setAttribute('position', `0 ${half} ${-half}`);
-    $('.room-back').setAttribute('position', `0 ${half} ${half}`);
-    $('.room-left').setAttribute('position', `${-half} ${half} 0`);
-    $('.room-right').setAttribute('position', `${half} ${half} 0`);
-    $('#fixation').setAttribute('position', `0 ${calibration?.eyeHeightM || defaults.previewEyeHeightM} ${-half + 0.01}`);
+    $('.room-ceiling').setAttribute('position', `0 ${height} 0`);
+    $('.room-front').setAttribute('position', `0 ${height / 2} ${-half}`);
+    $('.room-back').setAttribute('position', `0 ${height / 2} ${half}`);
+    $('.room-left').setAttribute('position', `${-half} ${height / 2} 0`);
+    $('.room-right').setAttribute('position', `${half} ${height / 2} 0`);
+    const fixationHeight = Math.min(calibration?.eyeHeightM || defaults.previewEyeHeightM, height - 0.1);
+    $('#fixation').setAttribute('position', `0 ${fixationHeight} ${-half + 0.01}`);
     applyPosition(0);
   }
 
@@ -82,6 +92,7 @@
       instantaneousFrequencyHz: active?.current?.frequencyHz ?? null,
       roomSettings: {
         roomSizeM: settings.roomSizeM,
+        roomHeightM: settings.roomHeightM,
         gridSpacingM: settings.gridSpacingM
       }
     };
