@@ -1,0 +1,36 @@
+<!doctype html>
+<html lang="ja">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width,initial-scale=1">
+  <title>Quest 前後並進・対数スイープ</title>
+  <script src="https://aframe.io/releases/1.7.0/aframe.min.js"></script>
+  <script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-app-compat.js"></script>
+  <script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-auth-compat.js"></script>
+  <script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-database-compat.js"></script>
+  <script src="firebase-config.js"></script>
+  <script src="ap-sweep-config.js?v=1"></script>
+  <script src="ap-sweep-stimulus.js?v=1"></script>
+  <style>
+    body{margin:0;background:#dce2e5;font:15px system-ui;color:#17232c}
+    #panel{position:fixed;z-index:10;top:10px;left:10px;max-width:460px;padding:12px 15px;border-radius:9px;background:#fffffff0}
+    #panel b,#panel small{display:block}#error{color:#a12626;margin-top:6px}
+  </style>
+</head>
+<body>
+  <div id="panel"><b>前後並進・対数周波数スイープ</b><span id="status">初期化中</span><small id="diagnostics"></small><div id="error"></div></div>
+  <a-scene id="scene" webxr="referenceSpaceType: local-floor" background="color: #8f969a" renderer="colorManagement: true" xr-mode-ui="enabled: true">
+    <a-entity id="sweep-room">
+      <a-plane class="room-floor" rotation="-90 0 0" material="src: url(grid.svg); shader: flat; side: double"></a-plane>
+      <a-plane class="room-ceiling" rotation="90 0 0" material="src: url(grid.svg); shader: flat; side: double"></a-plane>
+      <a-plane class="room-front" material="src: url(grid.svg); shader: flat; side: double"></a-plane>
+      <a-plane class="room-back" rotation="0 180 0" material="src: url(grid.svg); shader: flat; side: double"></a-plane>
+      <a-plane class="room-left" rotation="0 90 0" material="src: url(grid.svg); shader: flat; side: double"></a-plane>
+      <a-plane class="room-right" rotation="0 -90 0" material="src: url(grid.svg); shader: flat; side: double"></a-plane>
+      <a-circle id="fixation" radius="0.025" color="#e32636" material="shader: flat; depthTest: false; depthWrite: false"></a-circle>
+    </a-entity>
+    <a-entity id="rig"><a-camera look-controls="enabled: true" wasd-controls="enabled: false" position="0 1.6 0"></a-camera></a-entity>
+  </a-scene>
+  <script src="ap-sweep-runtime.js?v=1"></script>
+</body>
+</html>
