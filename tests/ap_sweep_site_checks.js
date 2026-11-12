@@ -20,8 +20,10 @@ for (const id of ['startFrequency', 'endFrequency', 'duration', 'velocityAmplitu
 for (const className of ['room-floor', 'room-ceiling', 'room-front', 'room-back', 'room-left', 'room-right']) {
   assert(questHtml.includes(`class="${className}"`), `missing room surface ${className}`);
 }
-assert(operatorJs.includes('sessions/${window.VR_REMOTE_CONFIG.sessionId}/ap-sweep'));
-assert(runtimeJs.includes('sessions/${window.VR_REMOTE_CONFIG.sessionId}/ap-sweep'));
+assert(operatorJs.includes('sessions/${window.VR_REMOTE_CONFIG.sessionId}-ap-sweep'));
+assert(runtimeJs.includes('sessions/${window.VR_REMOTE_CONFIG.sessionId}-ap-sweep'));
+assert(!operatorJs.includes('sessionId}/ap-sweep'));
+assert(!runtimeJs.includes('sessionId}/ap-sweep'));
 assert(runtimeJs.includes("'instantaneous_frequency_hz'"));
 assert(runtimeJs.includes("'ap_position_m'"));
 assert(runtimeJs.includes("'ap_velocity_m_s'"));

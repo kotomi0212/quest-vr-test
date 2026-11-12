@@ -327,7 +327,7 @@
       const credential = await app.auth().signInAnonymously();
       user = credential.user;
       const database = app.database();
-      root = database.ref(`sessions/${window.VR_REMOTE_CONFIG.sessionId}/ap-sweep`);
+      root = database.ref(`sessions/${window.VR_REMOTE_CONFIG.sessionId}-ap-sweep`);
       database.ref('.info/serverTimeOffset').on('value', snap => { serverOffsetMs = snap.val() || 0; });
       database.ref('.info/connected').on('value', snap => {
         const wasConnected = connected;

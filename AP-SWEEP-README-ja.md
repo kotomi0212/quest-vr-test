@@ -8,7 +8,7 @@
 - PC操作: `operator3.html`
 
 Firebase Realtime Databaseでは、既存サイトと衝突しないように
-`sessions/<sessionId>/ap-sweep/` 以下だけを使用します。
+`sessions/<sessionId>-ap-sweep/` 以下だけを使用します。
 
 ## 初期設定
 

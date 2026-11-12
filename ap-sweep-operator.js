@@ -147,7 +147,7 @@
   }
   app = firebase.initializeApp(window.VR_REMOTE_CONFIG.firebase, 'ap-sweep-operator');
   const database = app.database();
-  root = database.ref(`sessions/${window.VR_REMOTE_CONFIG.sessionId}/ap-sweep`);
+  root = database.ref(`sessions/${window.VR_REMOTE_CONFIG.sessionId}-ap-sweep`);
   database.ref('.info/serverTimeOffset').on('value', snap => { serverOffsetMs = snap.val() || 0; });
   app.auth().onAuthStateChanged(user => {
     const signedIn = !!(user && !user.isAnonymous);
@@ -155,6 +155,6 @@
     $('control').hidden = !signedIn;
     if (!signedIn) return;
     root.child('status').on('value', receiveStatus);
-    if (!$('preview').getAttribute('src')) $('preview').src = 'quest3.html?preview=1&v=1';
+    if (!$('preview').getAttribute('src')) $('preview').src = 'quest3.html?preview=1&v=2';
   });
 })();
