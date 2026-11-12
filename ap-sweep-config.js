@@ -2,10 +2,14 @@
 (function (scope) {
   'use strict';
 
+  const segments = Object.freeze([
+    Object.freeze({ startFrequencyHz: 0.7, endFrequencyHz: 0.1, durationSec: 30 }),
+    Object.freeze({ startFrequencyHz: 0.1, endFrequencyHz: 0.05, durationSec: 70 })
+  ]);
+
   const config = Object.freeze({
-    startFrequencyHz: 0.7,
-    endFrequencyHz: 0.05,
-    durationSec: 300,
+    segments,
+    durationSec: 100,
     velocityAmplitudeMps: 0.1,
     roomSizeM: 6,
     roomHeightM: 2.5,

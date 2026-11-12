@@ -27,10 +27,9 @@
 
   function commandSettings(command) {
     return APSweepStimulus.validate({
-      startFrequencyHz: Number(command.startFrequencyHz),
-      endFrequencyHz: Number(command.endFrequencyHz),
-      durationSec: Number(command.durationSec),
-      velocityAmplitudeMps: Number(command.velocityAmplitudeMps),
+      segments: defaults.segments,
+      durationSec: defaults.durationSec,
+      velocityAmplitudeMps: defaults.velocityAmplitudeMps,
       roomSizeM: Number(command.roomSizeM),
       roomHeightM: Number(command.roomHeightM),
       gridSpacingM: Number(command.gridSpacingM),
@@ -286,7 +285,7 @@
       calibration: { ...calibration },
       trajectory,
       samples: [],
-      current: { frequencyHz: command.mode === 'sweep' ? candidate.startFrequencyHz : null, positionM: 0, velocityMps: 0 },
+      current: { frequencyHz: command.mode === 'sweep' ? candidate.segments[0].startFrequencyHz : null, positionM: 0, velocityMps: 0 },
       countdownStartedPerf: performance.now(),
       startedPerf: null,
       startedWallMs: null,

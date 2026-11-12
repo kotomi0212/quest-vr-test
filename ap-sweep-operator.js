@@ -4,10 +4,6 @@
   const $ = id => document.getElementById(id);
   const defaults = AP_SWEEP_CONFIG;
   const fields = {
-    startFrequencyHz: 'startFrequency',
-    endFrequencyHz: 'endFrequency',
-    durationSec: 'duration',
-    velocityAmplitudeMps: 'velocityAmplitude',
     roomSizeM: 'roomSize',
     roomHeightM: 'roomHeight',
     gridSpacingM: 'gridSpacing'
@@ -31,9 +27,8 @@
   function updateSummary() {
     try {
       const c = readSettings();
-      const k = APSweepStimulus.sweepRate(c);
-      const cycles = c.startFrequencyHz * Math.expm1(k * c.durationSec) / k;
-      $('summary').textContent = `高周波→低周波の対数スイープ：約${cycles.toFixed(2)}周期。速度振幅は全区間で±${c.velocityAmplitudeMps} m/s、位置は速度の時間積分です。部屋は床面${c.roomSizeM} m角、壁高${c.roomHeightM} m（中央から各壁まで${(c.roomSizeM / 2).toFixed(1)} m）。`;
+      const cycles = APSweepStimulus.totalCycles(c);
+      $('summary').textContent = `固定100秒：0～30秒は0.7→0.1 Hz、30～100秒は0.1→0.05 Hz。合計約${cycles.toFixed(2)}周期、速度振幅±${c.velocityAmplitudeMps} m/s。部屋は床面${c.roomSizeM} m角、壁高${c.roomHeightM} m（中央から各壁まで${(c.roomSizeM / 2).toFixed(1)} m）。`;
     } catch (error) { $('summary').textContent = error.message; }
   }
   $('control').addEventListener('input', updateSummary);
@@ -156,6 +151,6 @@
     $('control').hidden = !signedIn;
     if (!signedIn) return;
     root.child('status').on('value', receiveStatus);
-    if (!$('preview').getAttribute('src')) $('preview').src = 'quest3.html?preview=1&v=3';
+    if (!$('preview').getAttribute('src')) $('preview').src = 'quest3.html?preview=1&v=4';
   });
 })();
