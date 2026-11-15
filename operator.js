@@ -47,6 +47,12 @@
   firebase.initializeApp(config.firebase);
   const auth = firebase.auth(), db = firebase.database(), root = db.ref('sessions/' + config.sessionId);
   let quest = null, lastSeq = 0, awaiting = null, subscribed = false, serverOffset = 0;
+  let syncSamples = [], bestSync = null, pcCommandLogs = [];
+  function identificationSettings() { return ExperimentStimulus.validate({
+    band:$('idBand').value, amplitudeMode:$('idAmplitudeMode').value, amplitudePreset:$('idAmplitudePreset').value,
+    phaseSeed:Number($('idSeed').value), rampSec:Number($('idRamp').value),
+    sweepSegments:$('idSegments').value.split(',').map(Number)
+  }); }
   let previewReady = false;
   db.ref('.info/connected').on('value', snap => { $('pcConnection').textContent = snap.val() ? 'PC Firebase: 接続済み' : 'PC Firebase: 切断'; });
   $('retry').onclick = () => location.reload();
@@ -59,6 +65,7 @@
         for(let i=0;i<=640;i++){const y=80-KiemelMotion.at(i/640*total,cfg).eyeLinearZ*1000;if(i)ctx.lineTo(i,y);else ctx.moveTo(i,y);}
         ctx.strokeStyle='#165e91';ctx.stroke();$('waveError').textContent='Kiemel：眼位置相当変位（縦軸±8 cm、横軸'+total+'秒）。共通波形から3条件を換算。追加ランプ・速度制限なし。';return;
       }
+      if(['id-multicosine','id-sweep'].includes($('mode').value)) { const cfg=identificationSettings(),tr=ExperimentStimulus.build(cfg,$('mode').value==='id-sweep'?'sweep':'multicosine',.005),ctx=$('waveform').getContext('2d');ctx.clearRect(0,0,640,160);ctx.beginPath();for(let i=0;i<=640;i++){const s=ExperimentStimulus.stateAt(tr,i/640*80),y=80-s.positionDeg*45;i?ctx.lineTo(i,y):ctx.moveTo(i,y);}ctx.strokeStyle='#165e91';ctx.stroke();$('waveError').textContent=`固定80秒 / ${cfg.amplitudePreset==='low'?'1':'2'}° pp / peak: 変位${tr.peaks.positionDeg.toFixed(3)}°・速度${tr.peaks.velocityDegS.toFixed(3)}°/s・加速度${tr.peaks.accelerationDegS2.toFixed(3)}°/s² / scale=${tr.scale.toFixed(4)}`;return; }
       const pp=Number($('amp').value),c={mode:$('mode').value,amplitudeDeg:pp/2,amplitudePpDeg:pp,frequencyHz:Number($('freq').value)};
       const ctx=$('waveform').getContext('2d'); ctx.clearRect(0,0,640,160);ctx.beginPath();
       const duration=Number($('duration').value);
@@ -70,6 +77,12 @@
   }
   $('control').addEventListener('input',drawWave); drawWave();
   db.ref('.info/serverTimeOffset').on('value', snap => { serverOffset = snap.val() || 0; });
+  async function clockSync() {
+    if(!freshQuest()) { tell('Quest接続を確認してから時計同期してください'); return; }
+    $('clockSync').disabled=true;syncSamples=[];
+    try { for(let i=0;i<8;i++){const id=crypto.randomUUID(),ref=root.child('clockSync/requests/'+id),responseRef=root.child('clockSync/responses/'+id),t0Epoch=Date.now(),t0Mono=performance.now();const responsePromise=new Promise((resolve,reject)=>{const timer=setTimeout(()=>{responseRef.off('value',handler);reject(Error('同期応答timeout'));},4000),handler=snap=>{const value=snap.val();if(!value)return;clearTimeout(timer);responseRef.off('value',handler);resolve(value);};responseRef.on('value',handler);});await ref.set({id,t0EpochMs:t0Epoch,t0MonotonicMs:t0Mono,questInstanceId:quest.instanceId});const response=await responsePromise;const t3Epoch=Date.now(),t3Mono=performance.now(),rtt=(t3Mono-t0Mono)-(response.t2MonotonicMs-response.t1MonotonicMs),offset=((response.t1EpochMs-t0Epoch)+(response.t2EpochMs-t3Epoch))/2;syncSamples.push({id,questInstanceId:response.questInstanceId,t0EpochMs:t0Epoch,t0MonotonicMs:t0Mono,t1QuestEpochMs:response.t1EpochMs,t1QuestMonotonicMs:response.t1MonotonicMs,t2QuestEpochMs:response.t2EpochMs,t2QuestMonotonicMs:response.t2MonotonicMs,t3EpochMs:t3Epoch,t3MonotonicMs:t3Mono,rttMs:rtt,questMinusPcOffsetMs:offset});await new Promise(resolve=>setTimeout(resolve,80));}bestSync=syncSamples.reduce((a,b)=>!a||b.rttMs<a.rttMs?b:a,null);await root.child('clockSync/estimate').set({...bestSync,estimatedAtPcEpochMs:Date.now(),sampleCount:syncSamples.length});await root.child('clockSync/logs/'+Date.now()).set(syncSamples);$('syncState').textContent=`offset Quest-PC ${bestSync.questMinusPcOffsetMs.toFixed(2)} ms / RTT ${bestSync.rttMs.toFixed(2)} ms（±${(bestSync.rttMs/2).toFixed(2)} ms目安）`;tell('時計同期が完了しました');}catch(e){tell('時計同期エラー: '+e.message);}finally{$('clockSync').disabled=false;}
+  }
+  $('clockSync').onclick=clockSync;
   const freshQuest = () => quest?.instanceId && Number.isFinite(quest.at) && Math.abs(Date.now() + serverOffset - quest.at) < 15000;
   function sendPreview(command) {
     if (previewReady) $('preview').contentWindow.postMessage({ type: 'stimulus-command', command }, location.origin);
@@ -136,9 +149,11 @@
         tell(`Questの実VRセッションを確認できません（XR描画=${quest.xrPresenting ?? '不明'}、XRセッション=${quest.xrSessionActive ?? '不明'}）。VRボタンを押しても続く場合、下の診断情報を確認してください。別のPC・Questタブが同じ接続先へ状態を送っていないかも確認してください。`); return;
       }
       if (type === 'start' && !quest.calibrated) { tell('PCで立ち位置を合わせてください'); return; }
-      const durationSec = isKiemel&&!safe?kcfg.motion.preSeconds+kcfg.motion.duration+kcfg.motion.postSeconds:Number($('duration').value), frequencyHz = Number($('freq').value), amplitudePpDeg = Number($('amp').value), amplitudeDeg=amplitudePpDeg/2;
-      const heightCm = Number($('heightCm').value), eyeHeightM = Number($('eyeCm').value) / 100, ankleHeightM = Number($('ankleCm').value) / 100, hipHeightM=Number($('hipCm').value)/100, rotationCenter=$('rotationCenter').value;
       const mode = type === 'start' && baselineRequest ? 'baseline' : $('mode').value;
+      const isIdentification=['id-multicosine','id-sweep'].includes(mode),idSettings=isIdentification&&!safe?identificationSettings():null;
+      if(type==='start'&&isIdentification&&(!bestSync||bestSync.questInstanceId!==quest.instanceId)){tell('このQuest接続に対して時計同期を実行してからSTARTしてください');return;}
+      const durationSec = isIdentification?80:isKiemel&&!safe?kcfg.motion.preSeconds+kcfg.motion.duration+kcfg.motion.postSeconds:Number($('duration').value), frequencyHz = Number($('freq').value), amplitudePpDeg = Number($('amp').value), amplitudeDeg=amplitudePpDeg/2;
+      const heightCm = Number($('heightCm').value), eyeHeightM = Number($('eyeCm').value) / 100, ankleHeightM = Number($('ankleCm').value) / 100, hipHeightM=Number($('hipCm').value)/100, rotationCenter=$('rotationCenter').value;
       if (!isKiemel && !safe && type !== 'configure' && (!Number.isFinite(ankleHeightM) || ankleHeightM < 0 || ankleHeightM > .2 || !Number.isFinite(hipHeightM) || hipHeightM < .4 || hipHeightM > 1.4 || hipHeightM <= ankleHeightM || !['ankle','hip','translation'].includes(rotationCenter) ||
         !Number.isFinite(eyeHeightM) || eyeHeightM < .8 || eyeHeightM > 2.1 || !Number.isFinite(heightCm) || heightCm < 100 || heightCm > 220)) { tell('身長・目・足関節・股関節の高さ、または回転中心が範囲外です'); return; }
       if (!isKiemel && type === 'start' && (!Number.isFinite(durationSec) || durationSec < 5 || durationSec > 600 ||
@@ -148,11 +163,12 @@
         runId: 'trial-' + crypto.randomUUID(), requestedAt: firebase.database.ServerValue.TIMESTAMP };
       if (!safe) {
         if(isKiemel)Object.assign(command,{protocol:'kiemel',mode:baselineRequest?'baseline':'kiemel',pattern:'kiemel-triangles',durationSec,kiemel:kcfg});
-        else Object.assign(command, { heightCm, eyeHeightM, ankleHeightM, hipHeightM, rotationCenter, mode, frequencyHz, amplitudeDeg, amplitudePpDeg, durationSec, pattern:$('pattern').value, fixationVisible:$('fixationVisible').checked });
+        else Object.assign(command, { heightCm, eyeHeightM, ankleHeightM, hipHeightM, rotationCenter, mode, frequencyHz, amplitudeDeg, amplitudePpDeg, durationSec, pattern:$('pattern').value, fixationVisible:$('fixationVisible').checked },isIdentification?{identificationSettings:idSettings,startAtPcEpochMs:Date.now()+5000,clockSync:bestSync}:{});
       }
       attempt = { seq, type, received: false }; awaiting = attempt;
       // set() queues writes offline. A reconnect may deliver this later; Quest rejects stale START/calibrate.
       await root.child('command').set(command);
+      if(type==='start'&&isIdentification){const tr=ExperimentStimulus.build(idSettings,mode==='id-sweep'?'sweep':'multicosine',.005);pcCommandLogs=[];for(let i=0;i<=8000;i++){const elapsed=i/100,s=ExperimentStimulus.stateAt(tr,elapsed),epoch=command.startAtPcEpochMs+elapsed*1000;pcCommandLogs.push([command.runId,new Date(epoch).toISOString(),epoch,performance.now(),elapsed,mode,s.positionDeg,s.velocityDegS,s.accelerationDegS2,s.frequencyHz]);}await root.child('commandLogs/'+command.runId).set({trialId:command.runId,startAtPcEpochMs:command.startAtPcEpochMs,mode,settings:idSettings,createdAtPcEpochMs:Date.now()});}
       sendPreview(command);
       if (awaiting === attempt && !attempt.received) tell(`✓ ${type === 'calibrate' ? '位置合わせ' : (type === 'return' ? 'STOP' : type.toUpperCase())}送信済み・Questの受信確認待ち`);
     } catch (error) {
@@ -169,7 +185,7 @@
     if($('mode').value==='multi10' && Number($('duration').value)===60)$('duration').value=125;
     if($('mode').value==='multi3' && [60,125].includes(Number($('duration').value)))$('duration').value=100;
     if(isK)$('pattern').value='kiemel-triangles';else if($('pattern').value==='kiemel-triangles')$('pattern').value='grid';
-    updateModeLabel();describePattern();drawWave();return dispatch('configure');
+    $('identificationControls').hidden=!['id-multicosine','id-sweep'].includes($('mode').value);$('duration').disabled=['id-multicosine','id-sweep'].includes($('mode').value);updateModeLabel();describePattern();drawWave();return dispatch('configure');
   };
   $('pattern').onchange = () => {
     if($('pattern').value==='kiemel-triangles'){$('mode').value='kiemel';$('kiemelControls').hidden=false;}
@@ -189,6 +205,8 @@
     const text=rows.map(r=>r.map(v=>'"'+String(v??'').replaceAll('"','""')+'"').join(',')).join('\r\n'),a=document.createElement('a');
     a.href=URL.createObjectURL(new Blob(['\uFEFF'+text],{type:'text/csv'}));a.download='quest-logs.csv';a.click();setTimeout(()=>URL.revokeObjectURL(a.href),1000);
   }catch(e){tell(e.message);} };
+  $('syncDownload').onclick=()=>{const columns=['id','t0EpochMs','t0MonotonicMs','t1QuestEpochMs','t1QuestMonotonicMs','t2QuestEpochMs','t2QuestMonotonicMs','t3EpochMs','t3MonotonicMs','rttMs','questMinusPcOffsetMs'],rows=[columns,...syncSamples.map(x=>columns.map(k=>x[k]))],a=document.createElement('a');a.href=URL.createObjectURL(new Blob(['\uFEFF'+rows.map(r=>r.join(',')).join('\r\n')],{type:'text/csv'}));a.download='clock-sync.csv';a.click();setTimeout(()=>URL.revokeObjectURL(a.href),1000);};
+  $('pcDownload').onclick=()=>{const rows=[['trial_id','pc_time_iso','pc_epoch_ms','pc_monotonic_ms','elapsed_time_s','stimulus_type','stimulus_position','stimulus_velocity','stimulus_acceleration','instantaneous_frequency_hz'],...pcCommandLogs],a=document.createElement('a');a.href=URL.createObjectURL(new Blob(['\uFEFF'+rows.map(r=>r.map(v=>`"${String(v??'').replaceAll('"','""')}"`).join(',')).join('\r\n')],{type:'text/csv'}));a.download='pc-command-log.csv';a.click();setTimeout(()=>URL.revokeObjectURL(a.href),1000);};
   $('download').onclick = async () => {
     try {
       const logs = (await root.child('logs').get()).val() || {};
