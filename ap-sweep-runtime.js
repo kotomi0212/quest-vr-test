@@ -236,6 +236,7 @@
     lastSequence = command.sequence;
     commandSequence = command.sequence;
     showError('');
+    if(command.type==='clock-sync'){const t1EpochMs=Date.now(),t1MonotonicMs=performance.now();acknowledge('clock-sync',{syncResponse:{id:command.syncId,t1EpochMs,t1MonotonicMs,t2EpochMs:Date.now(),t2MonotonicMs:performance.now(),questInstanceId:instanceId}});return;}
     if (command.type === 'emergency') {
       stopImmediately('emergency-stopped');
       acknowledge('idle', { reason: 'emergency-stopped' });
@@ -346,7 +347,6 @@
       user = credential.user;
       const database = app.database();
       root = database.ref(`sessions/${window.VR_REMOTE_CONFIG.sessionId}-ap-sweep`);
-      root.child('clockSync/requests').on('child_added',snap=>{const request=snap.val();if(!request||request.questInstanceId!==instanceId)return;const t1EpochMs=Date.now(),t1MonotonicMs=performance.now();root.child('clockSync/responses/'+request.id).set({id:request.id,t1EpochMs,t1MonotonicMs,t2EpochMs:Date.now(),t2MonotonicMs:performance.now(),questInstanceId:instanceId}).catch(console.error);});
       database.ref('.info/serverTimeOffset').on('value', snap => { serverOffsetMs = snap.val() || 0; });
       database.ref('.info/connected').on('value', snap => {
         const wasConnected = connected;
