@@ -236,7 +236,7 @@
     lastSequence = command.sequence;
     commandSequence = command.sequence;
     showError('');
-    if(command.type==='clock-sync'){const t1EpochMs=Date.now(),t1MonotonicMs=performance.now();acknowledge('clock-sync',{syncResponse:{id:command.syncId,t1EpochMs,t1MonotonicMs,t2EpochMs:Date.now(),t2MonotonicMs:performance.now(),questInstanceId:instanceId}});return;}
+    if(command.type==='configure'&&command.syncOnly){const t1EpochMs=Date.now(),t1MonotonicMs=performance.now();acknowledge('clock-sync',{syncResponse:{id:command.syncId,t1EpochMs,t1MonotonicMs,t2EpochMs:Date.now(),t2MonotonicMs:performance.now(),questInstanceId:instanceId}});return;}
     if (command.type === 'emergency') {
       stopImmediately('emergency-stopped');
       acknowledge('idle', { reason: 'emergency-stopped' });
