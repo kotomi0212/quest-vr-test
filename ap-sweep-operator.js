@@ -1,156 +1,26 @@
 (() => {
   'use strict';
-
-  const $ = id => document.getElementById(id);
-  const defaults = AP_SWEEP_CONFIG;
-  const fields = {
-    roomSizeM: 'roomSize',
-    roomHeightM: 'roomHeight',
-    gridSpacingM: 'gridSpacing'
-  };
-  for (const [key, id] of Object.entries(fields)) $(id).value = defaults[key];
-
-  const tell = text => { $('message').textContent = text; };
-  let quest = null;
-  let root = null;
-  let app = null;
-  let sequence = 0;
-  let serverOffsetMs = 0;
-  let previewReady = false;
-
-  function readSettings() {
-    const values = {};
-    for (const [key, id] of Object.entries(fields)) values[key] = Number($(id).value);
-    return APSweepStimulus.validate({ ...defaults, ...values });
-  }
-
-  function updateSummary() {
-    try {
-      const c = readSettings();
-      const cycles = APSweepStimulus.totalCycles(c);
-      $('summary').textContent = `固定100秒：0～30秒は0.7→0.1 Hz、30～100秒は0.1→0.05 Hz。合計約${cycles.toFixed(2)}周期、速度振幅±${c.velocityAmplitudeMps} m/s。部屋は床面${c.roomSizeM} m角、壁高${c.roomHeightM} m（中央から各壁まで${(c.roomSizeM / 2).toFixed(1)} m）。`;
-    } catch (error) { $('summary').textContent = error.message; }
-  }
-  $('control').addEventListener('input', updateSummary);
-  updateSummary();
-
-  function command(type, extra = {}) {
-    const safe = ['stop', 'emergency'].includes(type);
-    return {
-      type,
-      sequence: sequence = Math.max(Date.now(), sequence + 1),
-      questInstanceId: quest?.instanceId || null,
-      requestedAt: firebase.database.ServerValue.TIMESTAMP,
-      ...(safe ? {} : readSettings()),
-      ...extra
-    };
-  }
-
-  function sendPreview(value) {
-    if (previewReady) $('preview').contentWindow.postMessage({ type: 'ap-sweep-command', command: { ...value, requestedAt: Date.now() } }, location.origin);
-  }
-
-  async function dispatch(type, extra = {}) {
-    let value;
-    try { value = command(type, extra); }
-    catch (error) { tell(error.message); return; }
-    sendPreview(value);
-    if (!root) { tell('Firebaseログインと接続を確認してください'); return; }
-    const safe = ['stop', 'emergency'].includes(type);
-    const freshQuest = quest?.instanceId && Number.isFinite(quest.at) && Math.abs(Date.now() + serverOffsetMs - quest.at) < 15000;
-    if (!freshQuest && !safe) { tell('Questの状態更新が途絶えています。接続と画面を確認してください'); return; }
-    if (['start', 'calibrate'].includes(type) && !quest.immersive) { tell('Questで標準VRボタンを押してimmersive-vrを開始してください'); return; }
-    if (type === 'start' && !quest.calibrated) { tell('先に「立ち位置を合わせる」を押してください'); return; }
-    try {
-      await root.child('command').set(value);
-      tell(type === 'start' ? 'STARTを送信しました' : `${type.toUpperCase()}を送信しました`);
-    } catch (error) { tell('送信エラー: ' + error.message); }
-  }
-
-  function receiveStatus(snapshot) {
-    quest = snapshot.val();
-    if (!quest) { $('state').textContent = '未接続'; return; }
-    const f = quest.instantaneousFrequencyHz;
-    $('state').textContent = `${quest.status || '不明'} / ${quest.activeMode || '-'} / 位置 ${Number(quest.apPositionM || 0).toFixed(4)} m / 速度 ${Number(quest.apVelocityMps || 0).toFixed(4)} m/s${Number.isFinite(f) ? ` / ${f.toFixed(4)} Hz` : ''}`;
-    $('diagnostics').textContent = `3D: ${quest.renderStarted ? '描画中' : '未完了'} / immersive-vr: ${quest.immersive ? '開始済み' : '未開始'} / 位置合わせ: ${quest.calibrated ? '完了' : '未完了'} / Firebase: ${quest.firebaseState || '不明'} / 接続ID: ${quest.instanceId}`;
-    const messages = {
-      countdown: 'Questが受信しました。3秒後に開始します。',
-      running: 'Questで提示中です。',
-      returning: 'Questの部屋を原点へ戻しています。',
-      idle: '停止・終了しました。',
-      blocked: 'Questで拒否されました: ' + (quest.error || '状態を確認してください'),
-      'log-error': 'ログ保存エラー: ' + (quest.error || '')
-    };
-    if (messages[quest.status]) tell(messages[quest.status]);
-  }
-
-  async function downloadLogs(format) {
-    if (!root) { tell('先にログインしてください'); return; }
-    try {
-      const logs = (await root.child('logs').get()).val() || {};
-      if (format === 'json') {
-        download(new Blob([JSON.stringify(logs, null, 2)], { type: 'application/json' }), 'ap-sweep-logs.json');
-        return;
-      }
-      const entries = [];
-      for (const userLogs of Object.values(logs)) for (const [runId, log] of Object.entries(userLogs)) entries.push({ runId, log });
-      const columns = [...new Set(entries.flatMap(entry => entry.log.sampleColumns || []))];
-      const rows = [['run_id', 'mode', ...columns, 'metadata_json']];
-      for (const { runId, log } of entries) {
-        const own = log.sampleColumns || [];
-        const { samples, ...metadata } = log;
-        for (const sample of samples || []) rows.push([runId, log.mode, ...columns.map(name => {
-          const index = own.indexOf(name);
-          return index < 0 ? '' : sample[index];
-        }), JSON.stringify(metadata)]);
-      }
-      const csv = '\uFEFF' + rows.map(row => row.map(value => `"${String(value ?? '').replaceAll('"', '""')}"`).join(',')).join('\r\n');
-      download(new Blob([csv], { type: 'text/csv' }), 'ap-sweep-logs.csv');
-    } catch (error) { tell('ログ取得エラー: ' + error.message); }
-  }
-
-  function download(blob, filename) {
-    const link = document.createElement('a');
-    link.href = URL.createObjectURL(blob);
-    link.download = filename;
-    link.click();
-    setTimeout(() => URL.revokeObjectURL(link.href), 1000);
-  }
-
-  $('signIn').onclick = async () => {
-    try {
-      await app.auth().signInWithEmailAndPassword($('email').value, $('password').value);
-      $('authState').textContent = 'ログインしました';
-    } catch (error) { $('authState').textContent = 'エラー: ' + error.message; }
-  };
-  $('configure').onclick = () => dispatch('configure');
-  $('calibrate').onclick = () => dispatch('calibrate');
-  $('start').onclick = () => dispatch('start', { mode: 'sweep', runId: 'sweep-' + crypto.randomUUID() });
-  $('baseline').onclick = () => dispatch('start', { mode: 'baseline', runId: 'baseline-' + crypto.randomUUID() });
-  $('stop').onclick = () => dispatch('stop');
-  $('emergency').onclick = () => dispatch('emergency');
-  $('csvDownload').onclick = () => downloadLogs('csv');
-  $('jsonDownload').onclick = () => downloadLogs('json');
-  window.addEventListener('message', event => {
-    if (event.origin !== location.origin || event.source !== $('preview').contentWindow || event.data?.type !== 'ap-sweep-preview-ready') return;
-    previewReady = true;
-    sendPreview(command('configure'));
-  });
-
-  if (!window.firebase || !window.VR_REMOTE_CONFIG?.firebase) {
-    $('authState').textContent = 'Firebase設定を読み込めません';
-    return;
-  }
-  app = firebase.initializeApp(window.VR_REMOTE_CONFIG.firebase, 'ap-sweep-operator');
-  const database = app.database();
-  root = database.ref(`sessions/${window.VR_REMOTE_CONFIG.sessionId}-ap-sweep`);
-  database.ref('.info/serverTimeOffset').on('value', snap => { serverOffsetMs = snap.val() || 0; });
-  app.auth().onAuthStateChanged(user => {
-    const signedIn = !!(user && !user.isAnonymous);
-    $('login').hidden = signedIn;
-    $('control').hidden = !signedIn;
-    if (!signedIn) return;
-    root.child('status').on('value', receiveStatus);
-    if (!$('preview').getAttribute('src')) $('preview').src = 'quest3.html?preview=1&v=4';
-  });
+  const $=id=>document.getElementById(id),defaults=AP_SWEEP_CONFIG,tell=text=>{$('message').textContent=text;};
+  const fields={roomSizeM:'roomSize',roomHeightM:'roomHeight',gridSpacingM:'gridSpacing'};
+  for(const [key,id] of Object.entries(fields))$(id).value=defaults[key];
+  let quest=null,root=null,app=null,sequence=0,serverOffsetMs=0,previewReady=false,syncSamples=[],bestSync=null,pcRows=[];
+  function readSettings(){const values={};for(const [key,id] of Object.entries(fields))values[key]=Number($(id).value);return APSweepStimulus.validate({...defaults,...values,amplitudePreset:$('amplitudePreset').value,band:$('band').value,phaseSeed:Number($('phaseSeed').value)});}
+  function updateSummary(){try{const c=readSettings(),mode=$('stimulusMode').value,trajectory=APSweepStimulus.buildTrajectory(c,mode);$('summary').textContent=`80秒 ${mode==='sweep'?'スイープ（10+8+12+50秒）':'マルチコサイン'} / 速度ピーク ${c.velocityAmplitudeMps.toFixed(2)} m/s / 推定変位ピーク ${trajectory.peaks.positionM.toFixed(3)} m / seed ${c.phaseSeed}`;}catch(e){$('summary').textContent=e.message;}}
+  $('control').addEventListener('input',updateSummary);updateSummary();
+  function command(type,extra={}){const safe=['stop','emergency'].includes(type);return {type,sequence:sequence=Math.max(Date.now(),sequence+1),questInstanceId:quest?.instanceId||null,requestedAt:firebase.database.ServerValue.TIMESTAMP,...(safe?{}:readSettings()),...extra};}
+  function sendPreview(value){if(previewReady)$('preview').contentWindow.postMessage({type:'ap-sweep-command',command:{...value,requestedAt:Date.now()}},location.origin);}
+  async function dispatch(type,extra={}){let value;try{value=command(type,extra);}catch(e){tell(e.message);return;}sendPreview(value);if(!root){tell('Firebase接続を確認してください');return;}const safe=['stop','emergency'].includes(type),fresh=quest?.instanceId&&Number.isFinite(quest.at)&&Math.abs(Date.now()+serverOffsetMs-quest.at)<15000;if(!fresh&&!safe){tell('Quest接続を確認してください');return;}if(['start','calibrate'].includes(type)&&!quest.immersive){tell('Questでimmersive-vrを開始してください');return;}if(type==='start'&&!quest.calibrated){tell('先に立ち位置を合わせてください');return;}if(type==='start'&&extra.mode!=='baseline'&&(!bestSync||bestSync.questInstanceId!==quest.instanceId)){tell('このQuestに対して時計同期を実行してください');return;}try{await root.child('command').set(value);if(type==='start'&&extra.mode!=='baseline')createPcRows(value);tell(type==='start'?'START送信済み':`${type.toUpperCase()}送信済み`);}catch(e){tell('送信エラー: '+e.message);}}
+  function createPcRows(cmd){const tr=APSweepStimulus.buildTrajectory(cmd,cmd.mode);pcRows=[];for(let i=0;i<=8000;i++){const t=i/100,s=APSweepStimulus.stateAt(tr,t),epoch=cmd.startAtPcEpochMs+t*1000;pcRows.push([cmd.runId,new Date(epoch).toISOString(),epoch,t,cmd.mode,s.positionM,s.velocityMps,s.accelerationMps2,s.frequencyHz]);}}
+  function receiveStatus(snap){quest=snap.val();if(!quest){$('state').textContent='未接続';return;}const f=quest.instantaneousFrequencyHz;$('state').textContent=`${quest.status||'不明'} / ${quest.activeMode||'-'} / AP位置 ${Number(quest.apPositionM||0).toFixed(4)} m / 速度 ${Number(quest.apVelocityMps||0).toFixed(4)} m/s${Number.isFinite(f)?` / ${f.toFixed(4)} Hz`:''}`;$('diagnostics').textContent=`3D: ${quest.renderStarted?'描画中':'未完了'} / immersive-vr: ${quest.immersive?'開始済み':'未開始'} / 位置合わせ: ${quest.calibrated?'完了':'未完了'} / Firebase: ${quest.firebaseState||'不明'} / 接続ID: ${quest.instanceId}`;}
+  async function clockSync(){if(!quest?.instanceId){tell('Quest接続を確認してください');return;}$('clockSync').disabled=true;syncSamples=[];try{for(let i=0;i<8;i++){const id=crypto.randomUUID(),responseRef=root.child('clockSync/responses/'+id),t0EpochMs=Date.now(),t0MonotonicMs=performance.now(),responsePromise=new Promise((resolve,reject)=>{const handler=s=>{const v=s.val();if(!v)return;clearTimeout(timer);responseRef.off('value',handler);resolve(v);},timer=setTimeout(()=>{responseRef.off('value',handler);reject(Error('同期応答timeout'));},4000);responseRef.on('value',handler);});await root.child('clockSync/requests/'+id).set({id,t0EpochMs,t0MonotonicMs,questInstanceId:quest.instanceId});const response=await responsePromise,t3EpochMs=Date.now(),t3MonotonicMs=performance.now(),rttMs=(t3MonotonicMs-t0MonotonicMs)-(response.t2MonotonicMs-response.t1MonotonicMs),questMinusPcOffsetMs=((response.t1EpochMs-t0EpochMs)+(response.t2EpochMs-t3EpochMs))/2;syncSamples.push({id,questInstanceId:response.questInstanceId,t0EpochMs,t0MonotonicMs,t1QuestEpochMs:response.t1EpochMs,t1QuestMonotonicMs:response.t1MonotonicMs,t2QuestEpochMs:response.t2EpochMs,t2QuestMonotonicMs:response.t2MonotonicMs,t3EpochMs,t3MonotonicMs,rttMs,questMinusPcOffsetMs});}bestSync=syncSamples.reduce((a,b)=>!a||b.rttMs<a.rttMs?b:a,null);await root.child('clockSync/estimate').set(bestSync);$('syncState').textContent=`Quest-PC ${bestSync.questMinusPcOffsetMs.toFixed(2)} ms / RTT ${bestSync.rttMs.toFixed(2)} ms / ±${(bestSync.rttMs/2).toFixed(2)} ms目安`;tell('時計同期完了');}catch(e){tell('時計同期エラー: '+e.message);}finally{$('clockSync').disabled=false;}}
+  function csvDownload(rows,name){const text='\uFEFF'+rows.map(row=>row.map(v=>`"${String(v??'').replaceAll('"','""')}"`).join(',')).join('\r\n'),a=document.createElement('a');a.href=URL.createObjectURL(new Blob([text],{type:'text/csv'}));a.download=name;a.click();setTimeout(()=>URL.revokeObjectURL(a.href),1000);}
+  async function downloadLogs(format){try{const logs=(await root.child('logs').get()).val()||{};if(format==='json'){const a=document.createElement('a');a.href=URL.createObjectURL(new Blob([JSON.stringify(logs,null,2)],{type:'application/json'}));a.download='ap-identification-logs.json';a.click();return;}const entries=[];for(const userLogs of Object.values(logs))for(const [runId,log]of Object.entries(userLogs))entries.push({runId,log});const columns=[...new Set(entries.flatMap(e=>e.log.sampleColumns||[]))],rows=[['trial_id','mode',...columns,'metadata_json']];for(const {runId,log}of entries){const own=log.sampleColumns||[],{samples,...metadata}=log;for(const sample of samples||[])rows.push([runId,log.mode,...columns.map(n=>{const i=own.indexOf(n);return i<0?'':sample[i];}),JSON.stringify(metadata)]);}csvDownload(rows,'quest-applied-log.csv');}catch(e){tell(e.message);}}
+  $('signIn').onclick=async()=>{try{await app.auth().signInWithEmailAndPassword($('email').value,$('password').value);$('authState').textContent='ログインしました';}catch(e){$('authState').textContent='エラー: '+e.message;}};
+  $('configure').onclick=()=>dispatch('configure');$('calibrate').onclick=()=>dispatch('calibrate');$('clockSync').onclick=clockSync;
+  $('start').onclick=()=>{const mode=$('stimulusMode').value;dispatch('start',{mode,runId:`${mode}-${crypto.randomUUID()}`,startAtPcEpochMs:Date.now()+5000,clockSync:bestSync});};
+  $('baseline').onclick=()=>dispatch('start',{mode:'baseline',runId:'baseline-'+crypto.randomUUID()});$('stop').onclick=()=>dispatch('stop');$('emergency').onclick=()=>dispatch('emergency');
+  $('pcCsvDownload').onclick=()=>csvDownload([['trial_id','pc_time_iso','pc_epoch_ms','elapsed_time_s','stimulus_type','ap_position_m','ap_velocity_m_s','ap_acceleration_m_s2','instantaneous_frequency_hz'],...pcRows],'pc-command-log.csv');
+  $('syncCsvDownload').onclick=()=>{const cols=['id','t0EpochMs','t0MonotonicMs','t1QuestEpochMs','t1QuestMonotonicMs','t2QuestEpochMs','t2QuestMonotonicMs','t3EpochMs','t3MonotonicMs','rttMs','questMinusPcOffsetMs'];csvDownload([cols,...syncSamples.map(s=>cols.map(k=>s[k]))],'clock-sync.csv');};$('csvDownload').onclick=()=>downloadLogs('csv');$('jsonDownload').onclick=()=>downloadLogs('json');
+  window.addEventListener('message',e=>{if(e.origin!==location.origin||e.source!==$('preview').contentWindow||e.data?.type!=='ap-sweep-preview-ready')return;previewReady=true;sendPreview(command('configure'));});
+  if(!window.firebase||!window.VR_REMOTE_CONFIG?.firebase){$('authState').textContent='Firebase設定を読み込めません';return;}app=firebase.initializeApp(window.VR_REMOTE_CONFIG.firebase,'ap-sweep-operator');const db=app.database();root=db.ref(`sessions/${window.VR_REMOTE_CONFIG.sessionId}-ap-sweep`);db.ref('.info/serverTimeOffset').on('value',s=>{serverOffsetMs=s.val()||0;});app.auth().onAuthStateChanged(user=>{const signedIn=!!(user&&!user.isAnonymous);$('login').hidden=signedIn;$('control').hidden=!signedIn;if(!signedIn)return;root.child('status').on('value',receiveStatus);if(!$('preview').getAttribute('src'))$('preview').src='quest3.html?preview=1&v=80s1';});
 })();

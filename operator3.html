@@ -3,17 +3,17 @@
 <head>
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width,initial-scale=1">
-  <title>前後並進スイープ 操作画面</title>
+  <title>前後並進80秒刺激 操作画面</title>
   <script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-app-compat.js"></script>
   <script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-auth-compat.js"></script>
   <script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-database-compat.js"></script>
   <script src="firebase-config.js"></script>
-  <script src="ap-sweep-config.js?v=4"></script>
-  <script src="ap-sweep-stimulus.js?v=4"></script>
+  <script src="ap-sweep-config.js?v=80s1"></script>
+  <script src="ap-sweep-stimulus.js?v=80s1"></script>
   <style>
     body{font:16px system-ui;max-width:760px;margin:28px auto;padding:0 18px;background:#f3f5f6;color:#17232c}
     section{background:#fff;border:1px solid #d5dde1;border-radius:12px;padding:18px;margin:14px 0}
-    h1{font-size:25px}label{display:block;font-weight:650;margin:11px 0 4px}input,button{box-sizing:border-box;padding:10px;border:1px solid #aebbc2;border-radius:7px;font:inherit}input{width:100%}
+    h1{font-size:25px}label{display:block;font-weight:650;margin:11px 0 4px}input,select,button{box-sizing:border-box;padding:10px;border:1px solid #aebbc2;border-radius:7px;font:inherit}input,select{width:100%}
     button{cursor:pointer;background:#e8edf0}.primary{color:#fff;background:#176b92;border-color:#176b92}.danger{color:#fff;background:#a93434;border-color:#a93434}
     .grid{display:grid;grid-template-columns:1fr 1fr;gap:11px}.buttons{display:grid;grid-template-columns:1fr 1fr;gap:10px}.muted{font-size:13px;color:#52636c}
     #state{font-weight:700;color:#176444}#message{padding:11px;border-radius:7px;background:#eaf3f8;min-height:24px}iframe{width:100%;height:320px;border:0;border-radius:9px;background:#8f969a}
@@ -21,7 +21,7 @@
   </style>
 </head>
 <body>
-  <h1>Quest 前後並進・対数周波数スイープ</h1>
+  <h1>Quest 前後並進・80秒同定刺激</h1>
   <p class="muted">回転刺激を含まない独立サイトです。正のAP位置・速度は前方（A-Frameの−Z方向）として記録します。</p>
   <section id="login">
     <h2>1. 実験者ログイン</h2>
@@ -34,7 +34,13 @@
     <p>Quest状態：<span id="state">確認中</span></p><p id="diagnostics" class="muted"></p>
     <iframe id="preview" title="並進刺激プレビュー"></iframe>
     <p class="muted">プレビューは形状確認用です。Questの実表示時刻や追跡姿勢とは一致しません。</p>
-    <p><b>固定刺激：100秒</b><br>0～30秒：0.7 → 0.1 Hz（対数）<br>30～100秒：0.1 → 0.05 Hz（対数）<br>速度振幅：0.1 m/s</p>
+    <p><b>刺激時間：80秒固定</b><br>室内全体をZ方向へ直接並進します。角度刺激・身体寸法換算は使用しません。</p>
+    <div class="grid">
+      <div><label for="stimulusMode">刺激</label><select id="stimulusMode"><option value="multicosine">マルチコサイン</option><option value="sweep">高周波→低周波スイープ</option></select></div>
+      <div><label for="amplitudePreset">速度振幅</label><select id="amplitudePreset"><option value="low" selected>0.05 m/s</option><option value="standard">0.10 m/s</option></select></div>
+      <div><label for="band">周波数帯域</label><select id="band"><option value="identification" selected>0.05～0.70 Hz</option><option value="paper">0.05～1.50 Hz</option></select></div>
+      <div><label for="phaseSeed">位相seed</label><input id="phaseSeed" type="number" value="20261115" step="1"></div>
+    </div>
     <div class="grid">
       <div><label for="roomSize">床面の幅・奥行き (m)</label><input id="roomSize" type="number" min="2" max="20" step="0.1"></div>
       <div><label for="roomHeight">壁の高さ (m)</label><input id="roomHeight" type="number" min="2" max="5" step="0.1"></div>
@@ -42,11 +48,12 @@
     </div>
     <p id="summary" class="muted"></p>
     <p><button id="configure">部屋設定を反映</button> <button id="calibrate">立ち位置を合わせる</button></p>
-    <div class="buttons"><button id="start" class="primary">スイープSTART（3秒後）</button><button id="baseline">Baseline START（3秒後）</button></div>
+    <p><button id="clockSync">時計同期（8往復）</button> <span id="syncState">未同期</span></p>
+    <div class="buttons"><button id="start" class="primary">刺激START（5秒後）</button><button id="baseline">Baseline START</button></div>
     <div class="buttons" style="margin-top:10px"><button id="stop" class="danger">STOP（2秒で原点へ）</button><button id="emergency" class="danger">緊急停止（即時）</button></div>
-    <p><button id="csvDownload">ログCSV出力</button> <button id="jsonDownload">ログJSON出力</button></p>
+    <p><button id="pcCsvDownload">PC指令CSV</button> <button id="csvDownload">Quest適用CSV</button> <button id="syncCsvDownload">同期CSV</button> <button id="jsonDownload">条件・ログJSON</button></p>
     <p id="message" role="status" aria-live="polite">QuestでVRを開始し、立ち位置を合わせてください。</p>
   </section>
-  <script src="ap-sweep-operator.js?v=4"></script>
+  <script src="ap-sweep-operator.js?v=80s1"></script>
 </body>
 </html>

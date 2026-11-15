@@ -14,14 +14,15 @@ for (const html of [operatorHtml, questHtml]) {
     if (!/^https?:/.test(match[1])) assert(fs.existsSync(path.join(root, match[1])), `missing ${match[1]}`);
   }
 }
-for (const id of ['roomSize', 'roomHeight', 'gridSpacing', 'start', 'baseline', 'stop', 'csvDownload']) {
+for (const id of ['roomSize', 'roomHeight', 'gridSpacing', 'stimulusMode', 'amplitudePreset', 'band', 'phaseSeed', 'clockSync', 'start', 'baseline', 'stop', 'csvDownload']) {
   assert(operatorHtml.includes(`id="${id}"`), `missing operator control ${id}`);
 }
 for (const removedId of ['startFrequency', 'endFrequency', 'duration', 'velocityAmplitude']) {
   assert(!operatorHtml.includes(`id="${removedId}"`), `fixed protocol must not expose ${removedId}`);
 }
-assert(operatorHtml.includes('0～30秒：0.7 → 0.1 Hz'));
-assert(operatorHtml.includes('30～100秒：0.1 → 0.05 Hz'));
+assert(operatorHtml.includes('刺激時間：80秒固定'));
+assert(operatorHtml.includes('0.05 m/s'));
+assert(operatorHtml.includes('0.10 m/s'));
 for (const className of ['room-floor', 'room-ceiling', 'room-front', 'room-back', 'room-left', 'room-right']) {
   assert(questHtml.includes(`class="${className}"`), `missing room surface ${className}`);
 }
@@ -32,6 +33,8 @@ assert(!runtimeJs.includes('sessionId}/ap-sweep'));
 assert(runtimeJs.includes("'instantaneous_frequency_hz'"));
 assert(runtimeJs.includes("'ap_position_m'"));
 assert(runtimeJs.includes("'ap_velocity_m_s'"));
+assert(runtimeJs.includes("'ap_acceleration_m_s2'"));
+assert(runtimeJs.includes("'estimated_pc_epoch_ms'"));
 assert(runtimeJs.includes('roomHeightM: settings.roomHeightM'));
 assert(!operatorHtml.includes('rotationCenter'));
 assert(!questHtml.includes('stimulus-driver'));

@@ -3,14 +3,14 @@
 <head>
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width,initial-scale=1">
-  <title>Quest 前後並進・対数スイープ</title>
+  <title>Quest 前後並進・80秒同定刺激</title>
   <script src="https://aframe.io/releases/1.7.0/aframe.min.js"></script>
   <script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-app-compat.js"></script>
   <script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-auth-compat.js"></script>
   <script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-database-compat.js"></script>
   <script src="firebase-config.js"></script>
-  <script src="ap-sweep-config.js?v=4"></script>
-  <script src="ap-sweep-stimulus.js?v=4"></script>
+  <script src="ap-sweep-config.js?v=80s1"></script>
+  <script src="ap-sweep-stimulus.js?v=80s1"></script>
   <style>
     body{margin:0;background:#dce2e5;font:15px system-ui;color:#17232c}
     #panel{position:fixed;z-index:10;top:10px;left:10px;max-width:460px;padding:12px 15px;border-radius:9px;background:#fffffff0}
@@ -18,7 +18,7 @@
   </style>
 </head>
 <body>
-  <div id="panel"><b>前後並進・対数周波数スイープ</b><span id="status">初期化中</span><small id="diagnostics"></small><div id="error"></div></div>
+  <div id="panel"><b>前後並進・80秒同定刺激</b><span id="status">初期化中</span><small id="diagnostics"></small><div id="error"></div></div>
   <a-scene id="scene" webxr="referenceSpaceType: local-floor" background="color: #8f969a" renderer="colorManagement: true" xr-mode-ui="enabled: true">
     <a-entity id="sweep-room">
       <a-plane class="room-floor" rotation="-90 0 0" material="src: url(grid.svg); shader: flat; side: double"></a-plane>
@@ -31,6 +31,6 @@
     </a-entity>
     <a-entity id="rig"><a-camera look-controls="enabled: true" wasd-controls="enabled: false" position="0 1.6 0"></a-camera></a-entity>
   </a-scene>
-  <script src="ap-sweep-runtime.js?v=4"></script>
+  <script src="ap-sweep-runtime.js?v=80s1"></script>
 </body>
 </html>

@@ -27,9 +27,12 @@
 
   function commandSettings(command) {
     return APSweepStimulus.validate({
-      segments: defaults.segments,
+      sweepSegments: defaults.sweepSegments,
       durationSec: defaults.durationSec,
-      velocityAmplitudeMps: defaults.velocityAmplitudeMps,
+      amplitudePreset: command.amplitudePreset,
+      band: command.band,
+      phaseSeed: Number(command.phaseSeed),
+      rampSec: defaults.rampSec,
       roomSizeM: Number(command.roomSizeM),
       roomHeightM: Number(command.roomHeightM),
       gridSpacingM: Number(command.gridSpacingM),
@@ -124,9 +127,13 @@
       state.frequencyHz,
       state.positionM,
       state.velocityMps,
+      state.accelerationMps2 || 0,
       -state.positionM,
       now,
       performance.timeOrigin + now,
+      active?.command?.clockSync ? performance.timeOrigin + now - active.command.clockSync.questMinusPcOffsetMs : null,
+      active?.command?.clockSync ? active.command.clockSync.rttMs / 2 : null,
+      active ? active.frameNumber++ : 0,
       phase
     ];
   }
@@ -148,9 +155,10 @@
       settings: trial.config,
       calibration: trial.calibration,
       coordinateSystem: 'AP position/velocity positive forward; A-Frame forward is -Z',
-      sampleColumns: ['elapsed_ms', 'instantaneous_frequency_hz', 'ap_position_m', 'ap_velocity_m_s', 'translation_z_m', 'performance_ms', 'epoch_estimate_ms', 'phase'],
+      stimulusDesign: trial.trajectory ? { type: trial.trajectory.type, design: trial.trajectory.design, peaks: trial.trajectory.peaks, scale: trial.trajectory.scale } : null,
+      sampleColumns: ['elapsed_ms', 'instantaneous_frequency_hz', 'ap_position_m', 'ap_velocity_m_s', 'ap_acceleration_m_s2', 'translation_z_m', 'performance_ms', 'quest_epoch_estimate_ms', 'estimated_pc_epoch_ms', 'sync_uncertainty_ms', 'frame_number', 'phase'],
       samples: trial.samples,
-      note: 'Software-commanded room transform; not measured photon output or externally synchronized time.'
+      note: 'Software-applied room translation at render update; not measured photon output.'
     };
     root.child(`logs/${user.uid}/${trial.command.runId}`).set(payload).catch(error => {
       acknowledge('log-error', { error: error.message, lastRunId: trial.command.runId });
@@ -178,9 +186,8 @@
     const now = performance.now();
     if (active.startedPerf === null) {
       if (now - active.countdownStartedPerf < active.config.countdownSec * 1000) return;
-      active.startedPerf = now;
-      active.startedWallMs = Date.now();
-      show(active.mode === 'baseline' ? 'Baseline再生中' : '対数スイープ再生中');
+      if(active.mode!=='baseline') { const estimatedPc=Date.now()-active.command.clockSync.questMinusPcOffsetMs,late=estimatedPc-active.command.startAtPcEpochMs;if(late>100){saveAndReset('late-start');acknowledge('blocked',{error:`予定開始に${late.toFixed(1)} ms遅延`});return;}active.startedPerf=now-late;active.startedWallMs=Date.now()-late; } else { active.startedPerf=now;active.startedWallMs=Date.now(); }
+      show(active.mode === 'baseline' ? 'Baseline再生中' : `${active.mode}再生中`);
       acknowledge('running', { runId: active.command.runId, startedAtQuestWallClockMs: active.startedWallMs });
     }
     const elapsedSec = (now - active.startedPerf) / 1000;
@@ -192,7 +199,7 @@
       active.current = {
         frequencyHz: null,
         positionM: active.returning.startPositionM * smooth,
-        velocityMps: active.returning.startPositionM * derivative
+        velocityMps: active.returning.startPositionM * derivative, accelerationMps2: 0
       };
       applyPosition(active.current.positionM);
       active.samples.push(sampleRow(elapsedSec, active.current, 'returning'));
@@ -203,7 +210,7 @@
       if (active.mode === 'baseline') saveAndReset('completed');
       else {
         const finalState = APSweepStimulus.stateAt(active.trajectory, active.config.durationSec);
-        active.current = { frequencyHz: finalState.frequencyHz, positionM: finalState.positionM, velocityMps: finalState.velocityMps };
+        active.current = { frequencyHz: finalState.frequencyHz, positionM: finalState.positionM, velocityMps: finalState.velocityMps, accelerationMps2: finalState.accelerationMps2 || 0 };
         applyPosition(active.current.positionM);
         active.samples.push(sampleRow(active.config.durationSec, active.current, 'stimulus'));
         beginReturn('completed');
@@ -211,9 +218,9 @@
       return;
     }
     const state = active.mode === 'baseline' ?
-      { frequencyHz: null, positionM: 0, velocityMps: 0 } :
+      { frequencyHz: null, positionM: 0, velocityMps: 0, accelerationMps2: 0 } :
       APSweepStimulus.stateAt(active.trajectory, elapsedSec);
-    active.current = { frequencyHz: state.frequencyHz, positionM: state.positionM, velocityMps: state.velocityMps };
+    active.current = { frequencyHz: state.frequencyHz, positionM: state.positionM, velocityMps: state.velocityMps, accelerationMps2: state.accelerationMps2 || 0 };
     applyPosition(state.positionM);
     active.samples.push(sampleRow(elapsedSec, active.current, active.mode === 'baseline' ? 'baseline' : 'stimulus'));
     if (now - lastStatusPerf > 1000) {
@@ -270,13 +277,13 @@
     if (command.type !== 'start') return;
     if (!calibration) { acknowledge('blocked', { error: '先に立ち位置を合わせてください' }); return; }
     if (active) { acknowledge('blocked', { error: 'STOP後に次の条件を開始してください' }); return; }
-    if (!['sweep', 'baseline'].includes(command.mode) || !/^[A-Za-z0-9_-]{1,100}$/.test(command.runId || '')) {
+    if (!['sweep', 'multicosine', 'baseline'].includes(command.mode) || !/^[A-Za-z0-9_-]{1,100}$/.test(command.runId || '') || (command.mode!=='baseline'&&(!Number.isFinite(command.startAtPcEpochMs)||!command.clockSync))) {
       acknowledge('blocked', { error: '開始指令が不正です' }); return;
     }
     settings = candidate;
     configureRoom();
     let trajectory = null;
-    try { if (command.mode === 'sweep') trajectory = APSweepStimulus.buildTrajectory(candidate); }
+    try { if (command.mode !== 'baseline') trajectory = APSweepStimulus.buildTrajectory(candidate,command.mode); }
     catch (error) { acknowledge('blocked', { error: error.message }); return; }
     active = {
       mode: command.mode,
@@ -285,12 +292,13 @@
       calibration: { ...calibration },
       trajectory,
       samples: [],
-      current: { frequencyHz: command.mode === 'sweep' ? candidate.segments[0].startFrequencyHz : null, positionM: 0, velocityMps: 0 },
+      current: { frequencyHz: command.mode === 'sweep' ? candidate.sweepSegments[0].startFrequencyHz : null, positionM: 0, velocityMps: 0, accelerationMps2:0 },
       countdownStartedPerf: performance.now(),
       startedPerf: null,
       startedWallMs: null,
-      returning: null
+      returning: null, frameNumber:0
     };
+    if(command.mode!=='baseline')active.config.countdownSec=Math.max(0,command.startAtPcEpochMs-(Date.now()-command.clockSync.questMinusPcOffsetMs))/1000;
     applyPosition(0);
     show(`開始待機（${candidate.countdownSec}秒）`);
     acknowledge('countdown', { runId: command.runId, countdownSec: candidate.countdownSec });
@@ -338,6 +346,7 @@
       user = credential.user;
       const database = app.database();
       root = database.ref(`sessions/${window.VR_REMOTE_CONFIG.sessionId}-ap-sweep`);
+      root.child('clockSync/requests').on('child_added',snap=>{const request=snap.val();if(!request||request.questInstanceId!==instanceId)return;const t1EpochMs=Date.now(),t1MonotonicMs=performance.now();root.child('clockSync/responses/'+request.id).set({id:request.id,t1EpochMs,t1MonotonicMs,t2EpochMs:Date.now(),t2MonotonicMs:performance.now(),questInstanceId:instanceId}).catch(console.error);});
       database.ref('.info/serverTimeOffset').on('value', snap => { serverOffsetMs = snap.val() || 0; });
       database.ref('.info/connected').on('value', snap => {
         const wasConnected = connected;
