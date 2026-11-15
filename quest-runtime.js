@@ -253,7 +253,6 @@
       endedAtQuestWallClockMs: Date.now(), anklePivotM: trial.pivot, calibration: trial.calibration, patternSettings: trial.patternSettings, layoutSettings:trial.layoutSettings, motionSettings:trial.motionSettings, timeOriginMs: performance.timeOrigin, serverOffsetMs: serverOffset, sampleColumns: ['elapsed_ms','applied_deg','commanded_deg','performance_ms','epoch_estimate_ms','translation_z_m'],
       samples: trial.samples,
       note: 'Software transforms, not measured photon output. Quest wall-clock timestamps are not synchronized with external sensors.' };
-    if(trial.identificationTrajectory){payload.identificationDesign={config:trial.identificationTrajectory.config,type:trial.identificationTrajectory.type,scale:trial.identificationTrajectory.scale,peaks:trial.identificationTrajectory.peaks,frequenciesHz:trial.identificationTrajectory.design?.frequencies||null,phasesRad:trial.identificationTrajectory.design?.phases||null,componentAmplitudesDeg:trial.identificationTrajectory.design?.amplitudes||null};payload.sampleColumns=['elapsed_ms','applied_deg','commanded_deg','performance_ms','quest_epoch_estimate_ms','translation_z_m','commanded_velocity_deg_s','commanded_acceleration_deg_s2','instantaneous_frequency_hz','frame_number','estimated_pc_epoch_ms','sync_uncertainty_ms'];payload.note='Applied software transform at the render update; this is not measured photon-onset time.';}
     if(trial.kiemel) {
       payload.kiemel=trial.kiemel;payload.kiemelCalibration=trial.kiemelCalibration;
       payload.sampleColumns=['elapsed_ms','applied_deg','commanded_deg','performance_ms','epoch_estimate_ms','translation_z_m','commanded_translation_z_m','ankle_reference_deg','eye_linear_z_m','eye_exact_z_m','phase'];
@@ -360,7 +359,7 @@
       resetKiemel();ack('pre-static',{runId:c.runId});return;
     }
     if(c.mode==='kiemel'||c.pattern==='kiemel-triangles'){block('Kiemelのプロトコル指令が必要です');return;}
-    if (!['baseline', 'sine', 'multi3', 'multi10', 'csv','id-multicosine','id-sweep'].includes(c.mode) || !Number.isFinite(c.durationSec) || c.durationSec < 5 || c.durationSec > 600 ||
+    if (!['baseline', 'sine', 'multi3', 'multi10', 'csv'].includes(c.mode) || !Number.isFinite(c.durationSec) || c.durationSec < 5 || c.durationSec > 600 ||
       !/^[A-Za-z0-9_-]{1,100}$/.test(c.runId || '') ||
       (c.mode === 'sine' && (!Number.isFinite(c.frequencyHz) || c.frequencyHz <= 0 || c.frequencyHz > 2 ||
         !Number.isFinite(c.amplitudeDeg) || c.amplitudeDeg < 0 || c.amplitudeDeg > 4)) ||
@@ -375,10 +374,8 @@
     fixationVisible=c.fixationVisible !== false;rotationCenter=c.rotationCenter;
     selectPattern(c.pattern || 'room');
     const token = generation;
-    let identificationTrajectory=null;if(['id-multicosine','id-sweep'].includes(c.mode)){if(c.durationSec!==80||!Number.isFinite(c.startAtPcEpochMs)||!c.clockSync){block('80秒刺激には時計同期と未来の開始時刻が必要です');return;}try{identificationTrajectory=ExperimentStimulus.build(c.identificationSettings,c.mode==='id-sweep'?'sweep':'multicosine',.002);}catch(e){block(e.message);return;}}
-    const trial = { cmd: { ...c, pattern:selectedPattern }, patternSettings:patternSettings(), layoutSettings:layoutSettings(), motionSettings:motionSettings(), samples: [], pivot: pivot.toArray(), points: null, calibration,identificationTrajectory,frameNumber:0,
+    const trial = { cmd: { ...c, pattern:selectedPattern }, patternSettings:patternSettings(), layoutSettings:layoutSettings(), motionSettings:motionSettings(), samples: [], pivot: pivot.toArray(), points: null, calibration,
       startedPerf: null, startedWallMs: null, preludePerf: null, preludeWallMs: null, preludeMs: c.mode === 'multi3' ? 30000 : 3000 };
-    if(identificationTrajectory)trial.preludeMs=Math.max(0,c.startAtPcEpochMs-(Date.now()-c.clockSync.questMinusPcOffsetMs));
     if (preview) {
       scene.querySelector('a-camera').setAttribute('position', { x: 0, y: c.eyeHeightM || 1.5, z: 0 });
       pivot.set(0, c.ankleHeightM || 0, 0); trial.pivot = pivot.toArray();
@@ -411,7 +408,7 @@
       if(active.kiemel){tickKiemel(now);return;}
       if (active.startedPerf === null) {
         if (now - active.preludePerf < active.preludeMs) return;
-        if(active.identificationTrajectory){const estimatedPcNow=Date.now()-active.cmd.clockSync.questMinusPcOffsetMs,late=estimatedPcNow-active.cmd.startAtPcEpochMs;if(late>100){finish('late-start');block(`予定開始に${late.toFixed(1)} ms遅延したため中止しました`);return;}active.startedPerf=now-late;active.startedWallMs=Date.now()-late;}else{active.startedPerf = now; active.startedWallMs = Date.now();}
+        active.startedPerf = now; active.startedWallMs = Date.now();
         show('再生中: ' + active.cmd.mode); ack('running', { commandSeq: active.cmd.seq, runId: active.cmd.runId, startedAtQuestWallClockMs: active.startedWallMs });
       }
       if (active.returning) {
@@ -422,14 +419,13 @@
       }
       const t = (now - active.startedPerf) / 1000, c = active.cmd;
       if (t >= c.durationSec) { finish(); return; }
-      const identification=active.identificationTrajectory?ExperimentStimulus.stateAt(active.identificationTrajectory,t):null;
-      const commanded = identification?identification.positionDeg:Stimulus.angle(c, t, active.points);
+      const commanded = Stimulus.angle(c, t, active.points);
       const dt = Math.max(0, Math.min((now - (active.lastFrame ?? now)) / 1000, .1));
       const previous = active.actualAngle || 0;
-      const target = identification?commanded:commanded * Math.min(1, t / 1.5, Math.max(0, (c.durationSec - t) / 1.5));
+      const target = commanded * Math.min(1, t / 1.5, Math.max(0, (c.durationSec - t) / 1.5));
       const degrees = previous + Math.max(-30 * dt, Math.min(30 * dt, target - previous));
       active.lastFrame = now; active.actualAngle = degrees;
-      const translationZ=rotate(degrees);if(identification){const questEpoch=performance.timeOrigin+now,estimatedPc=questEpoch-c.clockSync.questMinusPcOffsetMs;active.samples.push([Math.round(t*1000),Math.round(degrees*100000)/100000,commanded,now,questEpoch,translationZ,identification.velocityDegS,identification.accelerationDegS2,identification.frequencyHz,active.frameNumber++,estimatedPc,c.clockSync.rttMs/2]);}else active.samples.push([Math.round(t * 1000), Math.round(degrees * 100000) / 100000, commanded, now,performance.timeOrigin + now,translationZ]);
+      const translationZ=rotate(degrees); active.samples.push([Math.round(t * 1000), Math.round(degrees * 100000) / 100000, commanded, now,performance.timeOrigin + now,translationZ]);
     }
   });
   if (preview) {
@@ -497,7 +493,6 @@
     user = (await auth.signInAnonymously()).user;
     const db = app.database(); root = db.ref('sessions/' + config.sessionId);
     db.ref('.info/serverTimeOffset').on('value', snap => { serverOffset = snap.val() || 0; });
-    root.child('clockSync/requests').on('child_added', snap => {const request=snap.val();if(!request||request.questInstanceId!==instanceId)return;const t1EpochMs=Date.now(),t1MonotonicMs=performance.now(),response={id:request.id,t1EpochMs,t1MonotonicMs,t2EpochMs:Date.now(),t2MonotonicMs:performance.now(),questInstanceId:instanceId};root.child('clockSync/responses/'+request.id).set(response).catch(console.error);});
     db.ref('.info/connected').on('value', snap => {
       connected = snap.val() === true;
       firebaseState = connected ? '接続済み' : '未接続';

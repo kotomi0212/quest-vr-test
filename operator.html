@@ -15,7 +15,7 @@
 <label>映像パターン（運動条件は共通）</label><select id="pattern"></select>
 <p><button id="applyPattern">選択した映像をQuestへ反映（VR開始前も可）</button></p>
 <p id="patternDescription" class="muted"></p><p class="muted">模様は停止中に変更してください。比較時は振幅・周波数・時間・位置合わせをそろえます。コントラスト値はソフトウェア上の設定で、Questの実測輝度を保証するものではありません。</p>
-<label>刺激</label><select id="mode"><option value="sine" selected>sin（単一正弦波）</option><option value="id-multicosine">80秒マルチコサイン</option><option value="id-sweep">80秒 高周波→低周波スイープ</option><option value="multi3">3周波数合成（0.03・0.1・0.5 Hz）</option><option value="multi10">10周波数合成・速度平滑版（0.024～2.936 Hz）</option></select>
+<label>刺激</label><select id="mode"><option value="sine" selected>sin（単一正弦波）</option><option value="multi3">3周波数合成（0.03・0.1・0.5 Hz）</option><option value="multi10">10周波数合成・速度平滑版（0.024～2.936 Hz）</option></select>
 <fieldset id="kiemelControls" hidden><legend>Kiemel設定（復旧用・通常UIでは非表示）</legend>
 <label>運動条件</label><select id="kiemelCondition"><option value="ankle">Ankle rotation</option><option value="hip">Hip rotation</option><option value="translation">Translation</option></select>
 <label>眼の高さ・実測（cm）</label><input id="kiemelEye" type="number" step="0.1" placeholder="必須・推定値なし">
@@ -29,17 +29,15 @@
 <label><input id="kiemelFixation" type="checkbox" style="width:auto">中央注視点を表示（初期OFF）</label>
 <p class="muted">正面1.07 m／左右1.52 mは眼からの距離。高さ2.5 m・側壁奥行き2.14 mは仮寸法です。入力した身体寸法を変更したら再度位置合わせをしてください。論文の正方向は前方（A-Frameでは−Z）です。固定3面スクリーンに基準眼位置から投影します。Questの頭部追跡は維持します。</p><p class="muted">Kiemelではこの枠内の設定を使用します。下にあるsinの振幅／周波数／再生時間は使用しません。</p></fieldset>
 <fieldset id="legacyControls"><legend>グリッド室内の刺激設定（Kiemelでは使用しません）</legend><label>正弦波の周波数 (Hz・単一sinのみ)</label><input id="freq" type="number" min="0.01" max="2" step="0.01" value="0.2">
-<div id="identificationControls" hidden><label>周波数帯域</label><select id="idBand"><option value="identification" selected>A: 0.05～0.70 Hz</option><option value="paper">B: 0.05～1.50 Hz</option></select><label>振幅</label><select id="idAmplitudePreset"><option value="low">1° peak-to-peak（控えめ）</option><option value="standard" selected>2° peak-to-peak（標準）</option></select><label>振幅方式（マルチコサイン）</label><select id="idAmplitudeMode"><option value="velocity" selected>各成分の速度振幅を統一</option><option value="acceleration">各成分の加速度振幅を統一</option></select><label>位相seed</label><input id="idSeed" type="number" value="20261115" step="1"><label>開始・終了ランプ（秒）</label><input id="idRamp" type="number" value="2" min="0" max="10" step="0.5"><label>スイープ区間（秒、合計80）</label><input id="idSegments" value="10,8,12,50"><p class="muted">0～10秒: 高域→0.20 Hz、10～18秒: →0.10 Hz、18～30秒: →0.05 Hz、30～80秒: 0.05 Hz保持。</p></div>
 <label>振幅プリセット（peak-to-peak）</label><select id="ampPreset"><option value="0.5">0.5° pp：微小</option><option value="1">1° pp：控えめ</option><option value="2" selected>2° pp：多周波の推奨初期値</option><option value="4">4° pp：強め</option></select>
 <label>振幅 (度、peak-to-peak)</label><input id="amp" type="number" min="0.1" max="8" step="0.1" value="2">
 <p class="muted">文献範囲：0.05°の微小sin、0.5～8° ppのPRTS、0.5～4° ppの10周波数刺激。プレ実験の初期値は、VR多周波刺激で全周波数の有意なcoherenceが報告された2° pp（±1°）です。</p>
 <label>再生時間 (秒)</label><input id="duration" type="number" min="5" max="600" step="5" value="60">
 </fieldset><canvas id="waveform" width="640" height="160" style="width:100%;background:#f5f5f5"></canvas><p id="waveError"></p>
 <div class="controls"><button id="start" class="primary">START（3秒後開始）</button><button id="stop" class="danger">STOP（2秒でBaselineへ）</button></div>
-<p><button id="clockSync">時計同期（8往復）</button> <span id="syncState">未同期</span></p><p><button id="emergency" class="danger">緊急停止（即時0°）</button> <button id="retry">接続再試行（PC再読込）</button> <span id="pcConnection"></span></p><p><button id="baseline">Baseline開始</button> <button id="pcDownload">PC指令ログCSV</button> <button id="csvDownload">Quest適用ログCSV</button> <button id="syncDownload">時刻同期ログCSV</button></p><p id="log" class="action-feedback" role="status" aria-live="polite">STARTで開始、STOPで停止します。</p><p><button id="download">実験条件・全ログJSON</button></p>
+<p><button id="emergency" class="danger">緊急停止（即時0°）</button> <button id="retry">接続再試行（PC再読込）</button> <span id="pcConnection"></span></p><p><button id="baseline">Baseline開始</button> <button id="csvDownload">ログCSV出力</button></p><p id="log" class="action-feedback" role="status" aria-live="polite">STARTで開始、STOPで停止します。</p><p><button id="download">Questが保存した刺激ログを取得（JSON）</button></p>
 </section>
 <script src="stimulus-engine.js?v=20261028-multi3-standby30"></script>
-<script src="experiment-stimulus.js?v=20261115-1"></script>
 <script src="pattern-config.js?v=20261022-noiseroom1"></script>
 <script src="layout-config.js?v=20261020-layout2"></script>
 <script src="motion-config.js?v=20261020-layout2"></script>
