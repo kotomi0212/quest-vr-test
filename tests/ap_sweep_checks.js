@@ -2,12 +2,12 @@
 const assert=require('node:assert/strict'),defaults=require('../ap-sweep-config.js'),S=require('../ap-sweep-stimulus.js');
 for(const mode of ['sweep','multicosine'])for(const amplitudePreset of ['low','standard']){
   const c=S.validate({...defaults,amplitudePreset}),tr=S.buildTrajectory(c,mode),limit=amplitudePreset==='low'?.05:.1;
-  assert.equal(c.durationSec,80);assert.equal(c.velocityAmplitudeMps,limit);assert.equal(c.sweepSegments.reduce((s,x)=>s+x.durationSec,0),80);
+  assert.equal(c.durationSec,80);assert.equal(c.targetVelocityPeakMps,limit);assert.equal(c.sweepSegments.reduce((s,x)=>s+x.durationSec,0),80);
   let peak=0;for(let i=0;i<=8000;i++){const x=S.stateAt(tr,i/100);assert(Number.isFinite(x.positionM));assert(Number.isFinite(x.velocityMps));assert(Number.isFinite(x.accelerationMps2));peak=Math.max(peak,Math.abs(x.velocityMps));}
-  assert(Math.abs(peak-limit)<2e-4,`${mode} ${amplitudePreset} peak ${peak}`);assert(Math.abs(S.stateAt(tr,0).positionM)<1e-12);assert(Math.abs(S.stateAt(tr,80).positionM)<1e-12);
+  assert(Math.abs(peak-limit)<2e-4,`${mode} ${amplitudePreset} peak ${peak}`);assert(tr.config.accelerationAmplitudeMps2>0);assert.equal(tr.design.domain,'acceleration');assert(Math.abs(S.stateAt(tr,0).positionM)<1e-12);assert(Math.abs(S.stateAt(tr,80).positionM)<1e-12);
 }
 const c=S.validate({...defaults,amplitudePreset:'low'});assert.deepEqual(S.bands.identification,[.05,.1,.15,.2,.25,.3,.35,.4,.45,.5,.55,.6,.65,.7]);
 for(const t of [10,18,30]){const e=1e-7;assert(Math.abs(S.sweepCycles(c,t-e)-S.sweepCycles(c,t+e))<1e-6);}
 const a=S.buildTrajectory({...c,phaseSeed:42},'multicosine'),b=S.buildTrajectory({...c,phaseSeed:42},'multicosine');for(const t of [0,1.234,20,40,79.999])assert.equal(S.stateAt(a,t).positionM,S.stateAt(b,t).positionM);
 assert.throws(()=>S.validate({...c,durationSec:90}));assert.throws(()=>S.validate({...c,amplitudePreset:'other'}));
-console.log('PASS: 80 s direct AP translation, two velocity amplitudes, reproducible multicosine, continuous sweep phase');
+console.log('PASS: 80 s acceleration-domain AP translation, equal component acceleration, bounded velocity peaks, reproducible phases');

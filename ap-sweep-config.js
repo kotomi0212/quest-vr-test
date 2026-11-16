@@ -9,7 +9,7 @@
       Object.freeze({ startFrequencyHz: .1, endFrequencyHz: .05, durationSec: 12 }),
       Object.freeze({ startFrequencyHz: .05, endFrequencyHz: .05, durationSec: 50 })
     ]),
-    amplitudePreset: 'low', velocityPresetsMps: Object.freeze({ low: .05, standard: .1 }),
+    amplitudePreset: 'low', velocityPeakPresetsMps: Object.freeze({ low: .05, standard: .1 }),
     band: 'identification', phaseSeed: 20261115, rampSec: 2,
     roomSizeM: 6, roomHeightM: 2.5, gridSpacingM: .5, integrationStepSec: .002,
     countdownSec: 5, returnDurationSec: 2, previewEyeHeightM: 1.6

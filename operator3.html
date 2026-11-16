@@ -8,8 +8,8 @@
   <script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-auth-compat.js"></script>
   <script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-database-compat.js"></script>
   <script src="firebase-config.js"></script>
-  <script src="ap-sweep-config.js?v=80s1"></script>
-  <script src="ap-sweep-stimulus.js?v=80s1"></script>
+  <script src="ap-sweep-config.js?v=80s4"></script>
+  <script src="ap-sweep-stimulus.js?v=80s4"></script>
   <style>
     body{font:16px system-ui;max-width:760px;margin:28px auto;padding:0 18px;background:#f3f5f6;color:#17232c}
     section{background:#fff;border:1px solid #d5dde1;border-radius:12px;padding:18px;margin:14px 0}
@@ -37,7 +37,7 @@
     <p><b>刺激時間：80秒固定</b><br>室内全体をZ方向へ直接並進します。角度刺激・身体寸法換算は使用しません。</p>
     <div class="grid">
       <div><label for="stimulusMode">刺激</label><select id="stimulusMode"><option value="multicosine">マルチコサイン</option><option value="sweep">高周波→低周波スイープ</option></select></div>
-      <div><label for="amplitudePreset">速度振幅</label><select id="amplitudePreset"><option value="low" selected>0.05 m/s</option><option value="standard">0.10 m/s</option></select></div>
+      <div><label for="amplitudePreset">刺激強度（各成分は加速度振幅一定）</label><select id="amplitudePreset"><option value="low" selected>合成速度ピーク 0.05 m/s</option><option value="standard">合成速度ピーク 0.10 m/s</option></select></div>
       <div><label for="band">周波数帯域</label><select id="band"><option value="identification" selected>0.05～0.70 Hz</option><option value="paper">0.05～1.50 Hz</option></select></div>
       <div><label for="phaseSeed">位相seed</label><input id="phaseSeed" type="number" value="20261115" step="1"></div>
     </div>
@@ -54,6 +54,6 @@
     <p><button id="pcCsvDownload">PC指令CSV</button> <button id="csvDownload">Quest適用CSV</button> <button id="syncCsvDownload">同期CSV</button> <button id="jsonDownload">条件・ログJSON</button></p>
     <p id="message" role="status" aria-live="polite">QuestでVRを開始し、立ち位置を合わせてください。</p>
   </section>
-  <script src="ap-sweep-operator.js?v=80s3"></script>
+  <script src="ap-sweep-operator.js?v=80s4"></script>
 </body>
 </html>
