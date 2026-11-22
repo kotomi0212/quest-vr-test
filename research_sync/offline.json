@@ -1,0 +1,7 @@
+{
+  "filter": {"kind": "lowpass", "cutoff": 4.0, "order": 4, "zero_phase": true},
+  "filter_columns": ["xb", "axb", "xp"],
+  "start_s": 10,
+  "end_s": 50,
+  "estimation": null
+}

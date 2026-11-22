@@ -1,0 +1,11 @@
+{
+  "duration_s": 90,
+  "stationary_start_s": 10,
+  "frequency_min_hz": 0.05,
+  "frequency_max_hz": 1.5,
+  "frequency_step_hz": 0.05,
+  "target_velocity_peak_m_s": 0.1,
+  "seed": 20261121,
+  "phase_candidates": 64,
+  "phase_refinement_iterations": 120
+}

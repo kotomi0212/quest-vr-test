@@ -1,0 +1,6 @@
+# Local experiment output and tooling (not application source)
+/outputs/
+/tools/
+.venv/
+__pycache__/
+*.py[cod]
