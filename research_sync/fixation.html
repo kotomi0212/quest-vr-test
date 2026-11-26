@@ -1,0 +1,15 @@
+<!doctype html><html lang="ja"><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>注視条件・30秒映像</title>
+<style>body{font:16px system-ui;max-width:1050px;margin:24px auto;padding:0 16px;background:#eef1f4;color:#253241}button,select{font:inherit;padding:12px;margin:6px}iframe{width:100%;height:480px;border:0}#status{padding:16px;background:white}a{color:#245f90}</style>
+<h1>注視条件の比較・30秒</h1><p>0.20 Hz／最大速度0.10 m/s／格子50 cm。3条件で部屋の動きは共通です。</p>
+<select id="condition"><option value="none">① 注視点なし</option><option value="dot">② 空間固定の赤い点</option><option value="spinner">③ 空間固定のローディング表示</option></select>
+<button id="start">3秒後に30秒再生</button><button id="stop">停止・原点へ戻す</button><p id="status">待機中</p>
+<iframe src="/scene?preview=1" title="3条件共通のVR映像プレビュー"></iframe>
+<p>Questでは <a href="/q">http://localhost:8872/q</a> を開いてVRに入ってください。以後はこのPC画面で条件変更・開始・停止できます。</p>
+<p>赤い点は直径5 cm、距離2.5 m。ローディング表示は直径約15 cm、毎秒1回転。中心は部屋・頭部から独立した空間座標に固定されます。VRに入った時の目の高さを一度採用します。再センタリングは試行中に行わないでください。</p>
+<p>最初と最後の3秒は滑らかな接続区間です。停止ボタンは即時停止のため原点へ戻ります。これは映像比較専用で、ComBalanceの計測・保存は行いません。</p>
+<script>
+const select=document.querySelector('#condition'),status=document.querySelector('#status');
+async function action(action){await fetch('/action',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({action,condition:select.value})});}
+select.onchange=()=>action('condition');document.querySelector('#start').onclick=()=>action('start');document.querySelector('#stop').onclick=()=>action('stop');
+setInterval(async()=>{try{const s=await(await fetch('/state')).json();const t=s.start===null?null:s.now-s.start;status.textContent=t===null?'待機中':t<0?`開始まで ${(-t).toFixed(1)} 秒`:t<30?`再生中 ${t.toFixed(1)} / 30 秒`:'終了（30秒）';select.disabled=t!==null&&t<30;}catch(e){status.textContent='サーバー未接続';}},200);
+</script></html>

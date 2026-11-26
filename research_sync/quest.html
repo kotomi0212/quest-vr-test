@@ -1,0 +1,17 @@
+<!doctype html><html lang="ja"><head><meta charset="utf-8"><title>PC操作・90秒APマルチコサイン</title>
+<script src="vendor/aframe.min.js"></script><script src="fixation.js"></script><script src="fixation_target.js"></script><script src="waveform.js"></script>
+<style>#status{position:fixed;top:0;z-index:5;background:#fff;padding:10px;font:16px system-ui}</style></head><body>
+<div id="status">右下のVRボタンで開始し、同期プローブが揃うまで待機してください。</div>
+<a-scene webxr="referenceSpaceType: local-floor" research-driver>
+<a-entity id="world"><a-entity id="sweep-room">
+  <a-plane id="scene-front" position="0 1.5 -3" width="6" height="3" src="grid.svg" repeat="12 6" material="shader:flat;side:double"></a-plane>
+  <a-plane id="scene-back" position="0 1.5 3" rotation="0 180 0" width="6" height="3" src="grid.svg" repeat="12 6" material="shader:flat;side:double"></a-plane>
+  <a-plane id="scene-left" position="-3 1.5 0" rotation="0 90 0" width="6" height="3" src="grid.svg" repeat="12 6" material="shader:flat;side:double"></a-plane>
+  <a-plane id="scene-right" position="3 1.5 0" rotation="0 -90 0" width="6" height="3" src="grid.svg" repeat="12 6" material="shader:flat;side:double"></a-plane>
+  <a-plane id="scene-floor" position="0 0 0" rotation="-90 0 0" width="6" height="6" src="grid.svg" repeat="12 12" material="shader:flat;side:double"></a-plane>
+  <a-plane id="scene-ceiling" position="0 3 0" rotation="90 0 0" width="6" height="6" src="grid.svg" repeat="12 12" material="shader:flat;side:double"></a-plane>
+</a-entity></a-entity>
+<a-sky color="#b8bcc2"></a-sky>
+<a-entity camera look-controls position="0 1.6 0"></a-entity>
+</a-scene>
+<script src="quest.js"></script></body></html>

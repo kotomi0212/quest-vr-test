@@ -1,0 +1,145 @@
+{
+  "seed": 20261123,
+  "automatic_execution": false,
+  "note": "First escalate within participant. Randomized follow-up lists may be used only after every included intensity is approved and tolerated. No automatic starts.",
+  "escalation": [
+    {
+      "condition": "pilot_rest",
+      "repeat": 2
+    },
+    {
+      "condition": "pilot_rest",
+      "repeat": 3
+    },
+    {
+      "condition": "pilot_rest",
+      "repeat": 1
+    },
+    {
+      "condition": "pilot_single_x1",
+      "repeat": 2
+    },
+    {
+      "condition": "pilot_single_x1",
+      "repeat": 3
+    },
+    {
+      "condition": "pilot_single_x1",
+      "repeat": 1
+    },
+    {
+      "condition": "pilot_single_x2",
+      "repeat": 1
+    },
+    {
+      "condition": "pilot_single_x2",
+      "repeat": 2
+    },
+    {
+      "condition": "pilot_single_x2",
+      "repeat": 3
+    },
+    {
+      "condition": "pilot_single_x3",
+      "repeat": 3
+    },
+    {
+      "condition": "pilot_single_x3",
+      "repeat": 2
+    },
+    {
+      "condition": "pilot_single_x3",
+      "repeat": 1
+    },
+    {
+      "condition": "pilot_five_x1",
+      "repeat": 3
+    },
+    {
+      "condition": "pilot_five_x1",
+      "repeat": 1
+    },
+    {
+      "condition": "pilot_five_x1",
+      "repeat": 2
+    },
+    {
+      "condition": "pilot_five_x1p4",
+      "repeat": 3
+    },
+    {
+      "condition": "pilot_five_x1p4",
+      "repeat": 2
+    },
+    {
+      "condition": "pilot_five_x1p4",
+      "repeat": 1
+    }
+  ],
+  "randomized_followup": {
+    "single": [
+      {
+        "condition": "pilot_single_x3",
+        "repeat": 1
+      },
+      {
+        "condition": "pilot_single_x2",
+        "repeat": 1
+      },
+      {
+        "condition": "pilot_single_x2",
+        "repeat": 2
+      },
+      {
+        "condition": "pilot_single_x1",
+        "repeat": 3
+      },
+      {
+        "condition": "pilot_single_x1",
+        "repeat": 2
+      },
+      {
+        "condition": "pilot_single_x1",
+        "repeat": 1
+      },
+      {
+        "condition": "pilot_single_x3",
+        "repeat": 2
+      },
+      {
+        "condition": "pilot_single_x2",
+        "repeat": 3
+      },
+      {
+        "condition": "pilot_single_x3",
+        "repeat": 3
+      }
+    ],
+    "five": [
+      {
+        "condition": "pilot_five_x1",
+        "repeat": 2
+      },
+      {
+        "condition": "pilot_five_x1p4",
+        "repeat": 2
+      },
+      {
+        "condition": "pilot_five_x1",
+        "repeat": 3
+      },
+      {
+        "condition": "pilot_five_x1",
+        "repeat": 1
+      },
+      {
+        "condition": "pilot_five_x1p4",
+        "repeat": 1
+      },
+      {
+        "condition": "pilot_five_x1p4",
+        "repeat": 3
+      }
+    ]
+  }
+}

@@ -1,0 +1,33 @@
+{
+  "trial_id": "replace-with-trial-id",
+  "start_s": 20,
+  "end_s": 80,
+  "filter": {"kind": "none"},
+  "filter_columns": ["xp", "xb", "axb"],
+  "estimation": {
+    "calibration_verified": false,
+    "fx_column": "rawFx",
+    "my_column": "rawMy",
+    "fz_column": "rawFz",
+    "fx_bias_n": null,
+    "my_bias_nm": null,
+    "fx_sign_on_plate": null,
+    "my_sign_on_plate": null,
+    "fz_sign_on_plate": null,
+    "moment_origin_is_contact_plane": false,
+    "body_mass_kg": null,
+    "body_com_from_ankle_m": null,
+    "body_inertia_kg_m2": null,
+    "ankle_height_m": null,
+    "two_link": {
+      "lower_mass_kg": null,
+      "upper_mass_kg": null,
+      "lower_inertia_kg_m2": null,
+      "upper_inertia_kg_m2": null,
+      "lower_com_m": null,
+      "upper_com_m": null,
+      "lower_length_m": null,
+      "ankle_height_m": null
+    }
+  }
+}

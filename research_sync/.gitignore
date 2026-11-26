@@ -1,0 +1,18 @@
+__pycache__/
+reference/
+*.pem
+*.key
+sessions/
+bin/
+recordings/
+results/vendor_inspection*/
+# Recorded measurements and private investigation notes stay on this PC.
+README-ja.md
+REPORT-ja.md
+results/*
+# These two directories contain generated mathematical stimuli, not recordings.
+!results/stimulus/
+!results/visual-stimulus-20261121/
+*.log
+*.exe
+*.dll

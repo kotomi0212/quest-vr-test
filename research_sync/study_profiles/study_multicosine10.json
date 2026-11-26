@@ -1,0 +1,50 @@
+{
+  "status": "runnable_in_acquisition_app",
+  "waveform": "pilot_acceleration_multicosine",
+  "duration_s": 100,
+  "analysis_interval_s": [
+    10,
+    90
+  ],
+  "ramp_s": 10,
+  "period_s": 20,
+  "analysis_cycles": 4,
+  "frequencies_hz": [
+    0.05,
+    0.1,
+    0.2,
+    0.3,
+    0.45,
+    0.6,
+    0.7,
+    0.9,
+    1.2,
+    1.5
+  ],
+  "phases_rad": [
+    1.756693872863341,
+    2.949256106856825,
+    0.4136792173048325,
+    1.8104038927117498,
+    -0.5644287357409272,
+    -0.17939519533191284,
+    2.114168355667605,
+    2.4177044301855357,
+    -1.6498776009006335,
+    2.3519966798435616
+  ],
+  "acceleration_component_m_s2": 0.01666464946520325,
+  "normalization": "none",
+  "maxima": {
+    "max_abs_displacement_m": 0.21992478328521287,
+    "max_abs_velocity_m_s": 0.07444950030494746,
+    "max_abs_acceleration_m_s2": 0.12812226383075
+  },
+  "formula": "x0=-sum(A*cos(2*pi*f*t+phi)/(2*pi*f)^2); x=e*x0; v=e*v0+e_dot*x0; a=e*a0+2*e_dot*v0+e_ddot*x0",
+  "note": "Equal component acceleration only in the 10..90s core; startup/shutdown add sidebands. No claim of stronger SNR than the old stimulus.",
+  "schema": 4,
+  "condition": "study_multicosine10",
+  "enabled": true,
+  "hold_final_position": false,
+  "fixation": null
+}
