@@ -1,0 +1,56 @@
+{
+  "schema": 4,
+  "waveform": "pilot_acceleration_multicosine",
+  "condition": "pilot_five_x2",
+  "duration_s": 100,
+  "ramp_s": 10,
+  "analysis_interval_s": [
+    10,
+    90
+  ],
+  "frequencies_hz": [
+    0.05,
+    0.1,
+    0.2,
+    0.4,
+    0.7
+  ],
+  "phases_rad": [
+    1.5706882248641094,
+    1.5705934203251946,
+    4.711980930457215,
+    7.853127077771178,
+    10.994106256656341
+  ],
+  "acceleration_component_m_s2": 0.0333292989304065,
+  "amplitude_multiple": 2,
+  "reference_component_m_s2": 0.01666464946520325,
+  "fixation": null,
+  "engineering_limits": {
+    "displacement_m": 0.3,
+    "velocity_m_s": 0.1,
+    "acceleration_m_s2": 0.2
+  },
+  "normalization": "None: exact requested per-component acceleration",
+  "sign_convention": "AP positive is world -Z; translate whole room, never camera",
+  "caution": "Engineering limits are not validated human safety limits; no sensor or photon delay calibration",
+  "maxima": {
+    "displacement_m": {
+      "value": 0.39411699166385195,
+      "time_s": 76.29372645369074
+    },
+    "velocity_m_s": {
+      "value": 0.14233052605142515,
+      "time_s": 20.494219025910777
+    },
+    "acceleration_m_s2": {
+      "value": 0.11133467507000312,
+      "time_s": 63.767384482012226
+    }
+  },
+  "limit_violations": [
+    "displacement_m",
+    "velocity_m_s"
+  ],
+  "enabled": false
+}

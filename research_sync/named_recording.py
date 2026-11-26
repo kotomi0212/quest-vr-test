@@ -9,6 +9,10 @@ import statistics
 import tempfile
 
 STIMULI={'multicosine':'90s_multicosine','none':'30s_no_fixation','dot':'30s_red_dot','spinner':'30s_loading'}
+STIMULI.update({'study_sweep90':'90s_sweep_centered','study_multicosine10':'100s_multicosine10'})
+
+STIMULI.update({'pilot_rest':'60s_rest','pilot_five_x1p4':'100s_five_x1p4'})
+STIMULI.update({f'pilot_{kind}_x{n}':f'{T}s_{kind}_x{n}' for kind,T in [('single',40),('five',100)] for n in (1,2,3)})
 
 def participant_info(value):
     subject=str(value['subject']).strip();height=float(value['height_cm']);number=int(value['trial_number'])

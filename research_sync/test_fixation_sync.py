@@ -28,7 +28,7 @@ class FixationSyncTests(unittest.IsolatedAsyncioTestCase):
                     except OSError:await asyncio.sleep(.1)
                 else:self.fail('Server did not start')
                 async with quest:
-                    await quest.send(json.dumps(dict(role='quest',token='test',client_version='pc-control-v3')))
+                    await quest.send(json.dumps(dict(role='quest',token='test',client_version='pc-control-v5')))
                     await receive(quest,'config')
                     async with connect(f'ws://127.0.0.1:{ws}') as operator:
                         await operator.send(json.dumps(dict(role='operator',token='test')));await receive(operator,'config')
@@ -38,14 +38,16 @@ class FixationSyncTests(unittest.IsolatedAsyncioTestCase):
                         await operator.send(json.dumps(dict(type='capture_height')))
                         request=await receive(quest,'capture_height')
                         await quest.send(json.dumps(dict(type='height_result',request_id=request['request_id'],ok=True,height_m=1.55,q_s=1)))
-                        for condition in ('dot','none','spinner','multicosine'):
+                        await operator.send(json.dumps(dict(type='start',condition='pilot_five_x2',start_delay_s=3)))
+                        self.assertIn('上限', (await receive(operator,'error'))['message'])
+                        for condition in ('dot','none','spinner','multicosine','pilot_single_x1','pilot_single_x3','pilot_five_x1','pilot_five_x1p4','pilot_rest','study_sweep90','study_multicosine10'):
                             await operator.send(json.dumps(dict(type='start',condition=condition,start_delay_s=3,participant=dict(subject='A',height_cm=170,trial_number=5))))
                             config=(await receive(quest,'config'))['stimulus'];command=await receive(quest,'start');identifier=command['trial_id']
                             self.assertEqual(config['condition'],condition)
                             self.assertEqual(config['eye_height_m'],1.55)
                             await operator.send(json.dumps(dict(type='capture_height')))
                             await receive(operator,'error')
-                            self.assertEqual(config['duration_s'],90 if condition=='multicosine' else 30)
+                            self.assertEqual(config['duration_s'],90 if condition in ('multicosine','study_sweep90') else 40 if condition.startswith('pilot_single') else 100 if condition.startswith('pilot_five') or condition=='study_multicosine10' else 60 if condition=='pilot_rest' else 30)
                             await quest.send(json.dumps(dict(type='received',trial_id=identifier,q_receive_s=1)))
                             for k in range(12):
                                 q=k*.25;await quest.send(json.dumps(dict(type='probe',q1=q,p2=q+100,p3=q+100.001,q4=q+.003)))

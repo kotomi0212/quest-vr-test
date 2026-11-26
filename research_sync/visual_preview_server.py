@@ -7,7 +7,8 @@ from urllib.parse import urlsplit
 
 def serve(port=8870,data='results/visual-stimulus-20261121'):
     root=Path(__file__).parent;folder=(root/data).resolve()
-    assets={'visual-preview.html','visual-preview.js','visual-scene.js','waveform.js','fixation.js','fixation_target.js','grid.svg','vendor/aframe.min.js'}
+    assets={'visual-preview.html','pilot-preview.html','pilot-preview.js','visual-preview.js','visual-scene.js','waveform.js','fixation.js','fixation_target.js','grid.svg','vendor/aframe.min.js'}
+    assets.update('pilot_profiles/'+p.name for p in (root/'pilot_profiles').glob('*') if p.suffix in ('.json','.png','.pdf','.csv'))
     outputs={'stimulus.json','verification.json','waveforms.png','stimulus.csv','component_amplitudes.csv'}
     class Handler(SimpleHTTPRequestHandler):
         def end_headers(self):self.send_header('Cache-Control','no-store');super().end_headers()

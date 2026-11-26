@@ -2,6 +2,12 @@
 import copy
 
 def select_stimulus(default,condition):
+    if condition.startswith('study_'):
+        from .study_stimuli import profile
+        return profile(condition)
+    if condition.startswith('pilot_'):
+        from .low_band import profile
+        return profile(condition)
     if condition=='multicosine':
         result=copy.deepcopy(default);result['condition']=condition;result['fixation']=None
         return result

@@ -31,7 +31,7 @@ class ControlApp:
         style=ttk.Style(root);style.configure('Title.TLabel',font=('Yu Gothic UI',22,'bold'));style.configure('Card.TLabel',font=('Yu Gothic UI',13))
         frame=ttk.Frame(root,padding=24);frame.pack(fill='both',expand=True)
         ttk.Label(frame,text='VR × ComBalance 計測',style='Title.TLabel').pack(anchor='w')
-        ttk.Label(frame,text='90秒マルチコサイン／30秒注視条件比較 ｜ USB接続 ｜ CSV保存',padding=(0,7)).pack(anchor='w')
+        ttk.Label(frame,text='中心固定スイープ／10周波数マルチコサイン／予備試験 ｜ USB接続 ｜ CSV保存',padding=(0,7)).pack(anchor='w')
         ttk.Label(frame,text='初回だけQuest Browserで http://localhost:8443 を開き、VRボタンで入ってください。\n以後の開始・停止はこのPCで操作できます。',padding=(0,8)).pack(anchor='w')
         self.preference_path=ROOT/'recordings/naming_preferences.json'
         try:prefs=json.loads(self.preference_path.read_text(encoding='utf-8'))
@@ -46,10 +46,11 @@ class ControlApp:
         for i,(key,title) in enumerate([('quest','Quest接続'),('vr','VR描画'),('force','ComBalance'),('clock','時刻対応')]):
             box=ttk.LabelFrame(cards,text=title,padding=12);box.grid(row=0,column=i,sticky='nsew',padx=4);cards.columnconfigure(i,weight=1)
             var=tk.StringVar(value='未接続');self.cards[key]=var;ttk.Label(box,textvariable=var,style='Card.TLabel').pack(anchor='w')
-        self.conditions={'90秒 マルチコサイン':'multicosine','30秒 注視点なし':'none','30秒 赤い固定点':'dot','30秒 ローディング表示':'spinner'}
+        from .study_stimuli import available_conditions
+        self.conditions=available_conditions()
         self.condition=tk.StringVar(value=next(iter(self.conditions)))
-        self.condition_box=ttk.Combobox(frame,textvariable=self.condition,values=list(self.conditions),state='readonly',width=35)
-        self.condition_box.pack(anchor='w');self.condition_box.bind('<<ComboboxSelected>>',lambda e:self.start_button.configure(text=('90' if self.conditions[self.condition.get()]=='multicosine' else '30')+'秒試行を予約'))
+        self.condition_box=ttk.Combobox(frame,textvariable=self.condition,values=list(self.conditions),state='readonly',width=56)
+        self.condition_box.pack(anchor='w');self.condition_box.bind('<<ComboboxSelected>>',lambda e:self.start_button.configure(text='選択した試行を予約'))
         height_row=ttk.Frame(frame);height_row.pack(fill='x',pady=5)
         self.height_button=ttk.Button(height_row,text='目線高さを取得し直す',command=lambda:self.submit(self.command(dict(type='capture_height'))),state='disabled')
         self.height_button.pack(side='left');self.eye_height=tk.StringVar(value='未取得（Questを装着し、VRに入ってから取得）')
@@ -126,7 +127,7 @@ class ControlApp:
                     try:info=await asyncio.to_thread(self.api);break
                     except Exception:continue
                 else:raise TimeoutError('計測サーバーの起動が確認できません')
-            if info['status'].get('service_version')!='pc-acquisition-v4':raise RuntimeError('古い計測サーバーが起動しています')
+            if info['status'].get('service_version')!='pc-acquisition-v6':raise RuntimeError('古い計測サーバーが起動しています。旧計測ソフトを終了し、このソフトで再接続してください')
             if not info['status']['vendor_enabled']:raise RuntimeError('このサーバーはComBalance実機取得が無効です')
             if self.connection_task is None or self.connection_task.done():self.connection_task=asyncio.create_task(self.connection_loop())
             self.events.put(('prepared',None))
@@ -178,7 +179,8 @@ class ControlApp:
         self.folder_button['state']='disabled' if self.connected else 'normal'
         self.connect_button['state']='disabled' if s['busy'] or self.connecting else 'normal'
         self.start_button['state']='normal' if enabled and not pending and not self.review_busy else 'disabled';self.stop_button['state']='normal' if self.connected else 'disabled'
-        if s['quest_connected'] and not s['quest_software_current']:self.message.set('Questで http://localhost:8443 を一度再読み込みしてください。PC操作用の表示に更新されます。')
+        if s.get('imu_warning'):self.message.set(s['imu_warning'])
+        elif s['quest_connected'] and not s['quest_software_current']:self.message.set('Questで http://localhost:8443 を一度再読み込みしてください。PC操作用の表示に更新されます。')
         elif s.get('last_error'):self.message.set(s['last_error'])
         elif self.named_directory:self.message.set('確定保存先: '+self.named_directory)
         else:self.message.set('準備完了後、PCで開始を予約してください。COM・FRF解析は実行しません。')
@@ -194,7 +196,8 @@ class ControlApp:
             if not meta.get('participant'):
                 self.review_busy=False;self.message.set('旧形式の記録です。被験者情報付きの新しい試行から名前付き保存が利用できます。');return
             name=basename(meta);weight=meta.get('weight_estimate',{}).get('body_mass_kg')
-            text=f'今回の記録を保存しますか？\n\n{name}\n身長: {meta["participant"]["height_cm"]:g} cm\n体重（床反力推定）: '+(f'{weight:.3f} kg' if weight is not None else '取得不可（CSVは空欄）')+'\n\n「いいえ」では名前付きCSVを作りません。復旧用の生データ・一時CSVは保持します。'
+            imu_warning=meta.get('external_imu_quality',{}).get('warning') or ''
+            text=f'今回の記録を保存しますか？\n\n{name}\n身長: {meta["participant"]["height_cm"]:g} cm\n体重（床反力推定）: '+(f'{weight:.3f} kg' if weight is not None else '取得不可（CSVは空欄）')+('\n'+imu_warning if imu_warning else '')+'\n\n「いいえ」では名前付きCSVを作りません。復旧用の生データ・一時CSVは保持します。'
             if not messagebox.askyesno('記録の保存',text,parent=self.root):
                 (Path(path)/'review_decision.json').write_text(json.dumps(dict(decision='not_saved'),ensure_ascii=False),encoding='utf-8')
                 self.review_busy=False;self.message.set('名前付き保存を見送りました。試行番号は変更していません。');return

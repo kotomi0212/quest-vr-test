@@ -1,10 +1,11 @@
 <!doctype html><html lang="ja"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>PC計測操作</title>
 <style>body{font:17px system-ui;background:#f2f5f8;color:#182536;max-width:1040px;margin:32px auto;padding:20px}.cards{display:grid;grid-template-columns:repeat(4,1fr);gap:12px}.card{background:white;border:1px solid #d8e0e9;border-radius:8px;padding:18px}.card small{display:block;color:#607083;margin-bottom:8px}button,input{font:inherit;padding:14px;margin:8px 6px 8px 0}button{border:0;border-radius:6px;background:#1f6742;color:white}#stop{background:#b02727}button:disabled{opacity:.4}progress{width:100%;height:24px}#status{font-size:23px;margin:22px 0}#save{overflow-wrap:anywhere;background:white;padding:18px}.note{color:#5d6b7a;font-size:14px}</style></head><body>
-<h1>VR × ComBalance 計測</h1><p>90秒・30周波数マルチコサイン ／ 加速度振幅一定 ／ USB接続</p>
+<h1>VR × ComBalance 計測</h1><p>中心固定スイープ ／ 10周波数マルチコサイン ／ USB接続</p>
 <div class="cards"><div class="card"><small>Quest</small><span id="quest">未接続</span></div><div class="card"><small>VR描画</small><span id="vr">待機</span></div><div class="card"><small>ComBalance</small><span id="force">待機</span></div><div class="card"><small>時計通信</small><span id="clock">—</span></div></div>
 <p>初回だけQuestでVRボタンを押してください。試行の操作はこのPCで行えます。</p>
 <label>開始までの待ち時間 <input id="delay" type="number" min="3" max="30" value="10" style="width:70px">秒</label>
-<button id="start" disabled>90秒試行を予約</button><button id="stop" disabled>停止</button>
+<p><label>刺激 <select id="condition"><!--STIMULUS_OPTIONS--></select></label></p>
+<button id="start" disabled>選択した試行を予約</button><button id="stop" disabled>停止</button>
 <div id="status">接続中…</div><progress id="progress" max="90" value="0"></progress>
 <p>幅6 m・奥行6 m・高さ3 m ／ 正面壁まで3 m ／ 格子50 cm</p>
 <div id="save">CSV保存先を確認中…</div><p id="message"></p>

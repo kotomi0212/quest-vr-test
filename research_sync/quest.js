@@ -51,7 +51,7 @@ function finish(reason,cancelReservation=true){
     if(!send(event))pendingEnded=event;
     if(active&&reason!=='complete'){
       const z=document.querySelector('#world').object3D.position.z;
-      returning={at:now(),z};
+      returning={at:now(),z,target_z:active.base_z};
     }
   }
   active=null;if(cancelReservation)reservation=null;pendingStart=false;ui(true);
@@ -65,7 +65,7 @@ function checkReservation(activate){
     send({type:'blocked',trial_id:id,message:'予約時刻にQuestのVR描画・時計同期が未準備です。装着して再予約してください。'});ui(true);return;
   }
   if(activate&&late>=0&&ready()){
-    active={...reservation,q_start_s:reservation.scheduled_pc_s-offset,offset};reservation=null;ui(true);
+    active={...reservation,q_start_s:reservation.scheduled_pc_s-offset,offset,base_z:document.querySelector('#world').object3D.position.z};reservation=null;ui(true);
   }
 }
 function requestStart(){
@@ -111,7 +111,7 @@ function connect(){
   const socket=new WebSocket(url);ws=socket;probes.length=0;lastPong=-Infinity;config=null;
   socket.onopen=()=>{
     if(ws!==socket)return;attempt=0;
-    send({role:'quest',token,user_agent:navigator.userAgent,client_version:'pc-control-v3'});
+    send({role:'quest',token,user_agent:navigator.userAgent,client_version:'pc-control-v5'});
     send({type:'capabilities',secure_context:window.isSecureContext,xr_available:!!navigator.xr,user_agent:navigator.userAgent});ui(true);
   };
   socket.onmessage=e=>{if(ws===socket)onMessage(e);};
@@ -149,13 +149,13 @@ AFRAME.registerComponent('research-driver',{
     checkReservation(true);
     if(active&&(!immersed()||!visible()||q-lastPong>2))invalidate('xr-or-heartbeat-lost');
     if(!active){
-      if(returning){const u=Math.min(1,(q-returning.at)/2);world.position.z=returning.z*(1-u*u*(3-2*u));if(u>=1)returning=null;}
+      if(returning){const u=Math.min(1,(q-returning.at)/2),e=u*u*(3-2*u);world.position.z=returning.z*(1-e)+returning.target_z*e;if(u>=1)returning=null;}
       ui();return;
     }
     const t=q-active.q_start_s;
     if(t<0){ui();return;}
-    if(t>=config.duration_s){world.position.z=0;finish('complete');return;}
-    const s=ResearchWaveform.evaluate(t,config);world.position.z=-s.x;
+    if(t>=config.duration_s){world.position.z=config.hold_final_position?active.base_z-ResearchWaveform.evaluate(config.duration_s,config).x:active.base_z;finish('complete');return;}
+    const s=ResearchWaveform.evaluate(t,config);world.position.z=active.base_z-s.x;
     send({type:'frame',trial_id:active.trial_id,q_apply_s:q,pc_estimate_s:q+active.offset,
       condition:config.condition||'multicosine',fixation_anchor:window.FixationTarget?.position(),elapsed_s:t,ap_m:s.x,ap_m_s:s.v,ap_m_s2:s.a,state:'software-transform',
       timing_kind:'A-Frame tick performance.now; not predicted display time or photons'});ui();

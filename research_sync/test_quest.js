@@ -74,3 +74,27 @@ height.deliver({type:'start',trial_id:'lock-height',scheduled_pc_s:height.clock+
 height.deliver({type:'capture_height',request_id:'busy'});
 assert.equal(captures,1);assert(height.messages.some(m=>m.type==='height_result'&&m.request_id==='busy'&&!m.ok));
 console.log('PASS: manual eye-height capture succeeds in VR and is blocked during reservation');
+
+for(const id of ['pilot_single_x3','pilot_five_x1p4']){
+ const c=JSON.parse(fs.readFileSync(__dirname+'/pilot_profiles/'+id+'.json'));
+ const h=harness();h.open();h.sync();h.deliver({type:'config',stimulus:c});
+ h.deliver({type:'start',trial_id:id,scheduled_pc_s:h.clock+103});drive(h,Math.ceil((c.duration_s+3.1)*10));
+ assert(h.messages.some(m=>m.type==='frame'&&m.condition===id));
+ assert(h.messages.some(m=>m.type==='ended'&&m.reason==='complete'));assert.equal(h.world.position.z,0);
+}
+console.log('PASS: 40/100-second pilot profiles log applied frames and finish at configured duration');
+
+for(const id of ['study_sweep90','study_multicosine10']){
+ const c=JSON.parse(fs.readFileSync(__dirname+'/study_profiles/'+id+'.json'));
+ const h=harness();h.open();h.sync();h.deliver({type:'config',stimulus:c});
+ h.deliver({type:'start',trial_id:id,scheduled_pc_s:h.clock+103});drive(h,Math.ceil((c.duration_s+3.1)*10));
+ assert(h.messages.some(m=>m.type==='frame'&&m.condition===id));
+ assert(h.messages.some(m=>m.type==='ended'&&m.reason==='complete'));
+ const end=c.hold_final_position?-waveform.evaluate(c.duration_s,c).x:0;
+ assert(Math.abs(h.world.position.z-end)<1e-10,'Sweep must hold final position, without resetting the world');
+ const base=h.world.position.z;
+ h.deliver({type:'start',trial_id:id+'-repeat',scheduled_pc_s:h.clock+103});drive(h,32);
+ const frame=h.messages.findLast(m=>m.type==='frame');
+ assert(Math.abs(h.world.position.z-(base-frame.ap_m))<1e-10,'Next trial must start from the held baseline');
+}
+console.log('PASS: new sweep/multicosine render, log, complete and preserve the world baseline');

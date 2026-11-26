@@ -73,6 +73,8 @@ def export_recording(events,trial_id,output,raw_directory=None,reason='unknown')
                 summary['combalance_samples']=index
             summary['capture_end']=next((b for b in reversed(blocks) if b['kind']=='capture_stop'),None)
             summary['force_coordinates']='Native manufacturer sensor axes, before AP remapping. Device coefficients applied; no software filter.'
+    from .imu_quality import external_imu_quality
+    summary['external_imu_quality']=external_imu_quality(output/'combalance.csv')
     from .named_recording import estimate_weight
     summary['weight_estimate']=estimate_weight(output,summary)
     (output/'metadata.json').write_text(json.dumps(summary,ensure_ascii=False,indent=2),encoding='utf-8')
