@@ -1,0 +1,40 @@
+{
+  "frequency_resolution_hz": 0.05,
+  "method": "raw rectangular-window periodogram; no preprocessing",
+  "103603471": {
+    "psd_0_hz": {
+      "bin_hz": 0.0,
+      "value": 40586227.25042
+    },
+    "psd_0.05_hz": {
+      "bin_hz": 0.05,
+      "value": 141926.16547466183
+    },
+    "psd_0.1_hz": {
+      "bin_hz": 0.1,
+      "value": 5894.683444338733
+    },
+    "psd_0.2_hz": {
+      "bin_hz": 0.2,
+      "value": 4896.820701493085
+    }
+  },
+  "112815676": {
+    "psd_0_hz": {
+      "bin_hz": 0.0,
+      "value": 12542951.628045
+    },
+    "psd_0.05_hz": {
+      "bin_hz": 0.05,
+      "value": 11382.31121266338
+    },
+    "psd_0.1_hz": {
+      "bin_hz": 0.1,
+      "value": 10404.05648107774
+    },
+    "psd_0.2_hz": {
+      "bin_hz": 0.2,
+      "value": 4986.714014682267
+    }
+  }
+}

@@ -1,0 +1,40 @@
+{
+  "source": "C:\\Users\\seguchi\\.codex\\attachments\\bb05b04e-8d30-4c1f-937a-1aa5a34b79fb\\head-20261028-112815676.csv",
+  "sampling_rate_hz": 100.0,
+  "source_rows": 7013,
+  "source_duration_s": 70.12,
+  "skip_s": 5.0,
+  "retained_duration_s": 20.0,
+  "retained_rows": 2000,
+  "filter": {
+    "type": "zero-phase centered FIR, Hamming-windowed sinc",
+    "cutoff_hz": 10.0,
+    "taps": 101
+  },
+  "spectral_analysis": {
+    "method": "Welch PSD",
+    "nperseg": 1024,
+    "overlap_percent": 50,
+    "linear_detrend_per_segment": true,
+    "frequency_resolution_hz": 0.09765625
+  },
+  "marker": {
+    "requested_hz": 0.1,
+    "nearest_bin_hz": 0.09765625,
+    "forward_back_z_psd_raw2_per_hz": 67147.63684050633
+  },
+  "dominant_peaks_0p05_to_10_hz": {
+    "X": {
+      "frequency_hz": 0.1953125,
+      "psd_raw2_per_hz": 18620074.530346643
+    },
+    "Y": {
+      "frequency_hz": 0.1953125,
+      "psd_raw2_per_hz": 245570.4758858456
+    },
+    "Z": {
+      "frequency_hz": 0.1953125,
+      "psd_raw2_per_hz": 93625.05048761374
+    }
+  }
+}

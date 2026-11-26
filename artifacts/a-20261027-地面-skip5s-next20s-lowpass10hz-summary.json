@@ -1,0 +1,35 @@
+{
+  "source": "C:\\Users\\seguchi\\.codex\\attachments\\e89a649e-0b08-4c5e-bd32-f71959a2df96\\a-20261027-地面.csv",
+  "sampling_rate_hz": 100.0,
+  "source_rows": 6591,
+  "source_duration_s": 65.9,
+  "skip_s": 5.0,
+  "retained_duration_s": 20.0,
+  "retained_rows": 2000,
+  "filter": {
+    "type": "zero-phase centered FIR, Hamming-windowed sinc",
+    "cutoff_hz": 10.0,
+    "taps": 101
+  },
+  "spectral_analysis": {
+    "method": "Welch PSD",
+    "nperseg": 1024,
+    "overlap_percent": 50,
+    "linear_detrend_per_segment": true,
+    "frequency_resolution_hz": 0.09765625
+  },
+  "dominant_peaks_0p05_to_10_hz": {
+    "X": {
+      "frequency_hz": 0.1953125,
+      "psd_raw2_per_hz": 18836990.556824736
+    },
+    "Y": {
+      "frequency_hz": 0.1953125,
+      "psd_raw2_per_hz": 32473.615295790703
+    },
+    "Z": {
+      "frequency_hz": 0.1953125,
+      "psd_raw2_per_hz": 122146.02956193915
+    }
+  }
+}

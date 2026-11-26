@@ -1,0 +1,26 @@
+{
+  "display_bin_spacing_hz": 0.02,
+  "true_resolution_hz": 0.02,
+  "duration_s": 50.0,
+  "processing": "mean removal only; no filter, detrend, or window",
+  "103603471": {
+    "amplitude_0.1_hz": {
+      "bin_hz": 0.1,
+      "raw_amplitude": 27.378404763069465
+    },
+    "amplitude_0.2_hz": {
+      "bin_hz": 0.2,
+      "raw_amplitude": 10.225428121697902
+    }
+  },
+  "112815676": {
+    "amplitude_0.1_hz": {
+      "bin_hz": 0.1,
+      "raw_amplitude": 53.49494935313541
+    },
+    "amplitude_0.2_hz": {
+      "bin_hz": 0.2,
+      "raw_amplitude": 17.336574748762658
+    }
+  }
+}

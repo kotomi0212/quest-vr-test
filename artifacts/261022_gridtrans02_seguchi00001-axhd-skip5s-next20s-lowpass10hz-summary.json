@@ -1,0 +1,10 @@
+{
+  "sampling_rate_hz": 100.00000000000213,
+  "retained_rows": 2000,
+  "dominant_peak_hz": 2.9296875000000626,
+  "dominant_peak_psd": 243.94382732922392,
+  "nearest_to_0p2_hz": 0.19531250000000416,
+  "psd_near_0p2_hz": 15.597060711822781,
+  "acceleration_column": "axhd",
+  "unit": "mm/s^2"
+}
